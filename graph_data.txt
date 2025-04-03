@@ -1,0 +1,38 @@
+Node A 1.0 20.0
+Node B 8.0 17.0
+Node C 15.0 20.0
+Node D 18.0 15.0
+Node E 2.0 4.0
+Node F 6.0 5.0
+Node G 12.0 12.0
+Node H 10.0 3.0
+Node I 19.0 1.0
+Node J 13.0 5.0
+Node K 3.0 15.0
+Node L 4.0 10.0
+Segment A B
+Segment A E
+Segment A K
+Segment B A
+Segment B C
+Segment B F
+Segment B K
+Segment B G
+Segment C D
+Segment C G
+Segment D G
+Segment D H
+Segment D I
+Segment E F
+Segment F L
+Segment G B
+Segment G F
+Segment G H
+Segment I D
+Segment I J
+Segment J I
+Segment K A
+Segment K L
+Segment L K
+Segment L F
+Segment H F
