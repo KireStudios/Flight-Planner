@@ -41,7 +41,7 @@ def GetClosest(g,x,y):
 def Plot(g,ax):
     for n in g.nodes:#Plot all nodes
         ax.plot(n.coords_x,n.coords_y,'ro')
-        ax.text(n.coords_x, n.coords_y + 0.1, n.name, ha='center', va='bottom')
+        ax.text(n.coords_x, n.coords_y + (((ax.get_xlim()[1]-ax.get_xlim()[0])**2+(ax.get_ylim()[1]-ax.get_ylim()[0])**2)**0.5)/100, n.name, ha='center', va='bottom')
     for s in g.segments:#Print all segments
         ax.plot([s.org.coords_x,s.des.coords_x],[s.org.coords_y,s.des.coords_y],'b-')
         ax.text((s.org.coords_x+s.des.coords_x)/2,(s.org.coords_y+s.des.coords_y)/2, s.cost, ha='center', va='bottom')#Cambiar esto !!!
