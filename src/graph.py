@@ -1,6 +1,8 @@
 from segment import *
 from node import *
+from path import *
 import matplotlib.pyplot as plt
+
 class Graph:
     def __init__(self):
         self.nodes=[]
@@ -14,8 +16,10 @@ def AddNode(g,n):
     g.nodes.append(n)
     return True
 
-def AddSegment (g, nameOriginNode, nameDestinationNode):
+def AddSegment(g, nameOriginNode, nameDestinationNode):
     #Buscar si los nombres estan en los nodos del gráfico
+    if nameOriginNode == nameDestinationNode:
+        return False
     org=None
     des=None
     for n in g.nodes:
@@ -50,40 +54,54 @@ def GetClosest(g,x,y):
             node = n
     return node
 
-def Plot(g,ax):
-    for n in g.nodes:#Plot all nodes
-        ax.plot(n.coords_x,n.coords_y,'ro')
-        ax.text(n.coords_x, n.coords_y + (((ax.get_xlim()[1]-ax.get_xlim()[0])**2+(ax.get_ylim()[1]-ax.get_ylim()[0])**2)**0.5)/100, n.name, ha='center', va='bottom')
-    for s in g.segments:#Print all segments
-        ax.plot([s.org.coords_x,s.des.coords_x],[s.org.coords_y,s.des.coords_y],'b-')
-        ax.text((s.org.coords_x+s.des.coords_x)/2,(s.org.coords_y+s.des.coords_y)/2, s.cost, ha='center', va='bottom')#Cambiar esto !!!
+def Plot(g, ax):
+    for n in g.nodes:  # Plot all nodes
+        ax.plot(n.coords_x, n.coords_y, 'ro')
+        ax.text(n.coords_x, n.coords_y + (((ax.get_xlim()[1] - ax.get_xlim()[0])**2 + (ax.get_ylim()[1] - ax.get_ylim()[0])**2)**0.5) / 100, n.name, ha='center', va='bottom')
+    for s in g.segments:  # Print all segments as arrows
+        ax.annotate(
+            '', 
+            xy=(s.des.coords_x, s.des.coords_y), 
+            xytext=(s.org.coords_x, s.org.coords_y),
+            arrowprops=dict(arrowstyle='->', color='blue')
+        )
+        ax.text((s.org.coords_x + s.des.coords_x) / 2, (s.org.coords_y + s.des.coords_y) / 2, s.cost, ha='center', va='bottom')  # Cambiar esto !!!
     ax.grid(True)
     ax.autoscale(enable=True, axis='both', tight=False)
 
-def PlotNode(g,nameOrigin,ax):
-    #Buscar si el nombre del nodo origen esta en los nodos del gráfico
-    find=False
+def PlotNode(g, nameOrigin, ax):
+    # Buscar si el nombre del nodo origen está en los nodos del gráfico
+    find = False
     for n in g.nodes:
-        if n.name == nameOrigin:find=True;org=n;break
-    if not find:return False
-    #Plot origen
-    ax.plot(org.coords_x,org.coords_y,'bo')
-    ax.text(n.coords_x, n.coords_y + 0.1, org.name, ha='center', va='bottom')
-    #buscar entre todos los nodos del gráfico
+        if n.name == nameOrigin:
+            find = True
+            org = n
+            break
+    if not find:
+        return False
+    # Plot origen
+    ax.plot(org.coords_x, org.coords_y, 'bo')
+    ax.text(org.coords_x, org.coords_y + 0.1, org.name, ha='center', va='bottom')
+    # Buscar entre todos los nodos del gráfico
     for n in g.nodes:
-        if n == org:#No utilizar el origen aquí
+        if n == org:  # No utilizar el origen aquí
             continue
-        #Plot de los puntos vecinos y la línea que los une
+        # Plot de los puntos vecinos y la línea que los une
         if n in org.neighbors:
-            ax.plot(n.coords_x,n.coords_y,'go')
+            ax.plot(n.coords_x, n.coords_y, 'go')
             ax.text(n.coords_x, n.coords_y + 0.1, n.name, ha='center', va='bottom')
-            AddSegment(g,org,n)
-            segmento = next((s for s in g.segments if (s.org == org and s.des == n) or (s.org == n and s.des == org)), None)#Antes utilizaba index, pero index si no existe da error, este no
-            ax.plot([segmento.org.coords_x,segmento.des.coords_x],[segmento.org.coords_y,segmento.des.coords_y],'r-')
-            ax.text((segmento.org.coords_x+segmento.des.coords_x)/2, (segmento.org.coords_y+segmento.des.coords_y)/2, segmento.cost, ha='center', va='bottom')
-        #Plot de los no vecinos
+            AddSegment(g, org, n)
+            segmento = next((s for s in g.segments if (s.org == org and s.des == n) or (s.org == n and s.des == org)), None)  # Antes utilizaba index, pero index si no existe da error, este no
+            ax.annotate(
+                '', 
+                xy=(segmento.des.coords_x, segmento.des.coords_y), 
+                xytext=(segmento.org.coords_x, segmento.org.coords_y),
+                arrowprops=dict(arrowstyle='->', color='red')
+            )
+            ax.text((segmento.org.coords_x + segmento.des.coords_x) / 2, (segmento.org.coords_y + segmento.des.coords_y) / 2, segmento.cost, ha='center', va='bottom')
+        # Plot de los no vecinos
         else:
-            ax.plot(n.coords_x,n.coords_y,'o',color='gray')
+            ax.plot(n.coords_x, n.coords_y, 'o', color='gray')
             ax.text(n.coords_x, n.coords_y + 0.1, n.name, ha='center', va='bottom')
     ax.grid(True)
     ax.autoscale(enable=True, axis='both', tight=False)
@@ -146,3 +164,54 @@ def DeleteSegmentByName(g,nameOrg,nameDes):
 def DeleteSegment(g,s):
     s.org.neighbors.remove(s.des)
     g.segments.remove(s)
+
+def Reachability(g, origin):
+    path = Path([])
+    # Initialize the queue and the visited nodes
+    AddNodeToPath(path, origin)
+    queue = [origin]
+    visited = set()
+    while queue:
+        current_node = queue.pop(0)
+        visited.add(current_node)
+        for neighbor in current_node.neighbors:
+            if neighbor not in visited:
+                queue.append(neighbor)
+                AddNodeToPath(path, neighbor)
+    if len(path.path) > 0:
+        return path
+    return None
+
+def FindShortestPath(g, origin, destination):
+    # Initialize the list of paths and the visited nodes
+    paths = []
+    path = Path([])
+    AddNodeToPath(path, origin)
+    # Check if the origin and destination are in the graph
+    if origin not in g.nodes or destination not in g.nodes:
+        return None
+    # Check if the origin and destination are the same
+    if origin == destination:
+        path.AddNodeToPath(destination)
+        return path
+    # Add the path to the list of paths
+    paths.append(path)
+    while paths:
+        # Get the path with the lowest estimated cost
+        min_path = min(paths, key=lambda p: p.cost)
+        paths.remove(min_path)
+        last_node = min_path.path[-1]
+        for neighbor in last_node.neighbors:
+            if neighbor == destination:
+                AddNodeToPath(min_path, neighbor)
+                return min_path
+            if neighbor not in min_path.path:
+                new_path = Path(min_path.path.copy())
+                AddNodeToPath(new_path, neighbor)
+                new_path.cost += Cost(last_node, neighbor)
+                paths.append(new_path)
+            else:
+                for p in paths:
+                    if neighbor in p.path and p.cost > min_path.cost + Cost(last_node, neighbor):
+                        paths.remove(p)
+    return None

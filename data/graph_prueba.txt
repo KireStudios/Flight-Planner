@@ -1,6 +1,12 @@
-Node A 4.0 1.0
-Node B 6.0 4.0
-Node D 4.0 6.0
-Node E 3.0 7.0
-Node F 2.0 4.0
-Node V 4.564903225806452 3.9908640752661544
+Node A 4 1
+Node B 6 4
+Node C 5 7
+Node D 4 6
+Node E 3 7
+Node F 2 4
+Segment A B
+Segment B C
+Segment C D
+Segment D E
+Segment E F
+Segment F A

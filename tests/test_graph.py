@@ -1,4 +1,10 @@
-from graph import * 
+import sys
+import os
+
+# Añade la ruta a la carpeta 'src' al PATH de Python
+src_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../src'))
+sys.path.append(src_path)
+from graph import *
 def CreateGraph_1 (): 
     G = Graph() 
     AddNode(G, Node("A",1,20))
@@ -61,12 +67,16 @@ J = CreateGraph_2()
 fig, axes = plt.subplots(2, 3, figsize=(12, 6))
 Plot(G,axes[0][0]) 
 PlotNode(G, "C",axes[1][0])
-SaveGraph(G,'Proyecto/graph_data.txt')
+SaveGraph(G,'v2branch/data/graph_data.txt')
 Plot(J,axes[0][1]) 
 PlotNode(J, "A",axes[1][1])
-SaveGraph(J,'Proyecto/graph_prueba.txt')
+SaveGraph(J,'v2branch/data/graph_prueba.txt')
 plt.show()
 n = GetClosest(G,15,5) 
 print (n.name) # La respuesta debe ser J 
 n = GetClosest(G,8,19)  
 print (n.name) # La respuesta debe ser B
+ns = Reachability(G, "A")
+print (ns) # La respuesta debe ser ['A', 'B', 'C', 'D', 'G', 'F', 'E', 'K', 'L', 'H', 'I', 'J']
+ns = FindShortestPath(G, "A", "I")
+print (ns) # La respuesta debe ser ['A', 'B', 'C', 'D', 'I']
