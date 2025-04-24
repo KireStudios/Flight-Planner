@@ -3,6 +3,7 @@ from tkinter import filedialog, messagebox, simpledialog
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from graph import *
+from path import *
 
 def pulsate_warning(widget, iterations=4, pulse_speed=25):
     # Save original background color
@@ -71,6 +72,10 @@ class GraphVisualizer:
         tk.Button(self.left_frame, text="Load Graph", command=self.GraphLoad).pack(pady=5)
         tk.Button(self.left_frame, text="Create Graph", command=self.GraphCreate).pack(pady=5)
         tk.Button(self.right_frame, text="Exit", command=self.root.quit).pack(pady=5)
+
+        # Temp buttons to be moved to menu later
+        tk.Button(self.left_frame, text="Reachability", command=self.PlotReachability).pack(pady=5)
+        tk.Button(self.left_frame, text="Shortest Path", command=self.PlotShortestPath).pack(pady=5)
 
         self.fig, self.ax1 = plt.subplots(figsize=(6, 5))
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.center_frame)
@@ -245,6 +250,61 @@ class GraphVisualizer:
             x = self.canvas.get_tk_widget().winfo_rootx()+event.x
             y = self.canvas.get_tk_widget().winfo_rooty()+self.canvas.get_tk_widget().winfo_height()-event.y
         self.PopupSelect(x,y,event.button,event)
+
+    def PlotReachability(self):
+        try:
+            nodeName = simpledialog.askstring("Input", "Enter origin node name:")
+            if nodeName is None:
+                messagebox.showerror("Error", "Nodes must be registered or check the name.")
+                return
+        except ValueError:
+            messagebox.showerror("Error", "Invalid nodes.")
+            return
+        node = None
+        for n in self.graph.nodes:
+            if n.name == nodeName:
+                node = n
+                break
+        if node is None:
+            messagebox.showerror("Error", "Node not found.")
+            return
+        path = Reachability(self.graph, node)
+        if path is None: return      ### TODO
+        self.clear_graph()
+        PlotPath(self.graph, path, self.ax1)
+        self.canvas.draw()
+
+    def PlotShortestPath(self):
+        try:
+            origin = simpledialog.askstring("Input", "Enter origin node name:")
+            if origin is None:
+                messagebox.showerror("Error", "Nodes must be registered or check the name.")
+                return
+            destination = simpledialog.askstring("Input", "Enter destination node name:")
+            if destination is None:
+                messagebox.showerror("Error", "Nodes must be registered or check the name.")
+                return
+        except ValueError:
+            messagebox.showerror("Error", "Invalid nodes.")
+            return
+        org = None
+        for n in self.graph.nodes:
+            if n.name == origin:
+                org = n
+                break
+        dest = None
+        for n in self.graph.nodes:
+            if n.name == destination:
+                dest = n
+                break
+        if org is None or dest is None:
+            messagebox.showerror("Error", "Node not found.")
+            return
+        path = FindShortestPath(self.graph, org, dest)
+        if path is None: return         ### TODO
+        self.clear_graph()
+        PlotPath(self.graph, path, self.ax1)
+        self.canvas.draw()
 
 root = tk.Tk()
 app = GraphVisualizer(root)

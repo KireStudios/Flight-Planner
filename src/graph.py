@@ -16,7 +16,7 @@ def AddNode(g,n):
     g.nodes.append(n)
     return True
 
-def AddSegment (g, nameOriginNode, nameDestinationNode):
+def AddSegment(g, nameOriginNode, nameDestinationNode):
     #Buscar si los nombres estan en los nodos del gráfico
     org=None
     des=None
@@ -70,7 +70,7 @@ def PlotNode(g,nameOrigin,ax):
     if not find:return False
     #Plot origen
     ax.plot(org.coords_x,org.coords_y,'bo')
-    ax.text(n.coords_x, n.coords_y + 0.1, org.name, ha='center', va='bottom')
+    ax.text(org.coords_x, org.coords_y + 0.1, org.name, ha='center', va='bottom')
     #buscar entre todos los nodos del gráfico
     for n in g.nodes:
         if n == org:#No utilizar el origen aquí
@@ -152,6 +152,7 @@ def DeleteSegment(g,s):
 def Reachability(g, origin):
     path = Path([])
     # Initialize the queue and the visited nodes
+    AddNodeToPath(path, origin)
     queue = [origin]
     visited = set()
     while queue:
@@ -160,7 +161,7 @@ def Reachability(g, origin):
         for neighbor in current_node.neighbors:
             if neighbor not in visited:
                 queue.append(neighbor)
-                path.AddNodeToPath(neighbor)
+                AddNodeToPath(path, neighbor)
     if len(path.path) > 0:
         return path
     return None
@@ -169,7 +170,7 @@ def FindShortestPath(g, origin, destination):
     # Initialize the list of paths and the visited nodes
     paths = []
     path = Path([])
-    path.AddNodeToPath(origin)
+    AddNodeToPath(path, origin)
     # Check if the origin and destination are in the graph
     if origin not in g.nodes or destination not in g.nodes:
         return None
@@ -186,11 +187,11 @@ def FindShortestPath(g, origin, destination):
         last_node = min_path.path[-1]
         for neighbor in last_node.neighbors:
             if neighbor == destination:
-                min_path.AddNodeToPath(neighbor)
+                AddNodeToPath(min_path, neighbor)
                 return min_path
             if neighbor not in min_path.path:
                 new_path = Path(min_path.path.copy())
-                new_path.AddNodeToPath(neighbor)
+                AddNodeToPath(new_path, neighbor)
                 new_path.cost += Cost(last_node, neighbor)
                 paths.append(new_path)
             else:
