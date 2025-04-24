@@ -73,10 +73,6 @@ class GraphVisualizer:
         tk.Button(self.left_frame, text="Create Graph", command=self.GraphCreate).pack(pady=5)
         tk.Button(self.right_frame, text="Exit", command=self.root.quit).pack(pady=5)
 
-        # Temp buttons to be moved to menu later
-        tk.Button(self.left_frame, text="Reachability", command=self.PlotReachability).pack(pady=5)
-        tk.Button(self.left_frame, text="Shortest Path", command=self.PlotShortestPath).pack(pady=5)
-
         self.fig, self.ax1 = plt.subplots(figsize=(6, 5))
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.center_frame)
         self.canvas.get_tk_widget().pack(expand=True, fill="both", padx=10, pady=10)
@@ -97,6 +93,8 @@ class GraphVisualizer:
         if not self.load:
             self.canvas.mpl_disconnect(self.cid_start)
             tk.Button(self.left_frame, text="Save Graph", command=self.GraphSave).pack(pady=5)
+            tk.Button(self.left_frame, text="Reachability", command=self.PlotReachability).pack(pady=5)
+            tk.Button(self.left_frame, text="Shortest Path", command=self.PlotShortestPath).pack(pady=5)
             self.cid = self.fig.canvas.mpl_connect('button_press_event', self.on_click)
             self.text_label.destroy()
     
@@ -112,7 +110,6 @@ class GraphVisualizer:
         self.clear_graph()
         Plot(self.graph, self.ax1)
         self.canvas.draw()
-
     def GraphCreate(self):
         folder_selected = filedialog.askdirectory(title="Select Folder to Save Graph")
         if not folder_selected:
@@ -137,7 +134,6 @@ class GraphVisualizer:
         self.clear_graph()
         Plot(self.graph, self.ax1)
         self.canvas.draw()
-
     def GraphSave(self):
         try:
             name = simpledialog.askstring("Input", "Enter file name:")
@@ -183,18 +179,17 @@ class GraphVisualizer:
             self.clear_graph()
             PlotNode(self.graph, selected_node.name, self.ax1)
             self.canvas.draw()
-
     def AddNode_(self,event):
         try:
             name = simpledialog.askstring("Input", "Enter origin node name:")
         except ValueError:
             messagebox.showerror("Error", "Invalid nodes.")
             return
+        if name is None: return
         self.clear_graph()
         AddNode(self.graph,Node(str(name),event.xdata,event.ydata))
         Plot(self.graph, self.ax1)
         self.canvas.draw()
-
     def AddSegment_(self):
         try:
             n1 = simpledialog.askstring("Input", "Enter origin node name:")
@@ -208,11 +203,11 @@ class GraphVisualizer:
         except ValueError:
             messagebox.showerror("Error", "Invalid nodes.")
             return
-        AddSegment(self.graph, n1, n2)
+        if n1 == None or n2 == None: return
         self.clear_graph()
+        AddSegment(self.graph, n1, n2)
         Plot(self.graph, self.ax1)
         self.canvas.draw()
-
     def DeleteNode_(self,event):
         min_dist = (((self.ax1.get_xlim()[1]-self.ax1.get_xlim()[0])**2+(self.ax1.get_ylim()[1]-self.ax1.get_ylim()[0])**2)**0.5)/self.tquocient
         selected_node = None
@@ -227,7 +222,6 @@ class GraphVisualizer:
             self.clear_graph()
             Plot(self.graph, self.ax1)
             self.canvas.draw()
-
     def DeleteSegment_(self,event):
         min_dist = (((self.ax1.get_xlim()[1]-self.ax1.get_xlim()[0])**2+(self.ax1.get_ylim()[1]-self.ax1.get_ylim()[0])**2)**0.5)/self.tquocient
         segment = None
@@ -242,7 +236,7 @@ class GraphVisualizer:
                 self.clear_graph()
                 Plot(self.graph, self.ax1)
                 self.canvas.draw()
-    
+ 
     def on_click(self,event):
         if self.popup_win != None:
             self.popup_win.destroy()
@@ -269,11 +263,31 @@ class GraphVisualizer:
             messagebox.showerror("Error", "Node not found.")
             return
         path = Reachability(self.graph, node)
-        if path is None: return      ### TODO
         self.clear_graph()
-        PlotPath(self.graph, path, self.ax1)
+        # Plot all nodes
+        for n in self.graph.nodes:
+            if n in path.path:
+                self.ax1.plot(n.coords_x, n.coords_y, 'ro')  # Red for reachable nodes
+            else:
+                self.ax1.plot(n.coords_x, n.coords_y, 'o', color='gray')  # Gray for non-reachable nodes
+            self.ax1.text(n.coords_x, n.coords_y + 0.1, n.name, ha='center', va='bottom')
+        # Plot all segments
+        for s in self.graph.segments:
+            self.ax1.annotate(
+                '',
+                xy=(s.des.coords_x, s.des.coords_y),
+                xytext=(s.org.coords_x, s.org.coords_y),
+                arrowprops=dict(arrowstyle='->', color='green' if s.org in path.path and s.des in path.path else 'gray')
+            )
+            self.ax1.text(
+                (s.org.coords_x + s.des.coords_x) / 2,
+                (s.org.coords_y + s.des.coords_y) / 2,
+                f"{s.cost}",
+                ha='center',
+                va='bottom'
+            )
         self.canvas.draw()
-
+    
     def PlotShortestPath(self):
         try:
             origin = simpledialog.askstring("Input", "Enter origin node name:")
@@ -301,7 +315,204 @@ class GraphVisualizer:
             messagebox.showerror("Error", "Node not found.")
             return
         path = FindShortestPath(self.graph, org, dest)
-        if path is None: return         ### TODO
+        self.clear_graph()
+        # Plot all nodes
+        for n in self.graph.nodes:
+            if path and n in path.path:
+                self.ax1.plot(n.coords_x, n.coords_y, 'ro')  # Red for nodes in the shortest path
+            else:
+                self.ax1.plot(n.coords_x, n.coords_y, 'o', color='gray')  # Gray for other nodes
+            self.ax1.text(n.coords_x, n.coords_y + 0.1, n.name, ha='center', va='bottom')
+        # Plot all segments
+        for s in self.graph.segments:
+            self.ax1.annotate(
+                '',
+                xy=(s.des.coords_x, s.des.coords_y),
+                xytext=(s.org.coords_x, s.org.coords_y),
+                arrowprops=dict(arrowstyle='->', color='blue' if path and s.org in path.path and s.des in path.path else 'gray')
+            )
+            self.ax1.text(
+                (s.org.coords_x + s.des.coords_x) / 2,
+                (s.org.coords_y + s.des.coords_y) / 2,
+                f"{s.cost}",
+                ha='center',
+                va='bottom'
+            )
+        self.canvas.draw()
+        try:
+            origin = simpledialog.askstring("Input", "Enter origin node name:")
+            if origin is None:
+                messagebox.showerror("Error", "Nodes must be registered or check the name.")
+                return
+            destination = simpledialog.askstring("Input", "Enter destination node name:")
+            if destination is None:
+                messagebox.showerror("Error", "Nodes must be registered or check the name.")
+                return
+        except ValueError:
+            messagebox.showerror("Error", "Invalid nodes.")
+            return
+        org = None
+        for n in self.graph.nodes:
+            if n.name == origin:
+                org = n
+                break
+        dest = None
+        for n in self.graph.nodes:
+            if n.name == destination:
+                dest = n
+                break
+        if org is None or dest is None:
+            messagebox.showerror("Error", "Node not found.")
+            return
+        path = FindShortestPath(self.graph, org, dest)
+        self.clear_graph()
+        # Plot all nodes
+        for n in self.graph.nodes:
+            self.ax1.plot(n.coords_x, n.coords_y, 'ro' if path and n in path.path else 'o')  # Removed redundant color argument
+            self.ax1.text(n.coords_x, n.coords_y + 0.1, n.name, ha='center', va='bottom')
+        # Plot all segments
+        for s in self.graph.segments:
+            self.ax1.annotate(
+                '',
+                xy=(s.des.coords_x, s.des.coords_y),
+                xytext=(s.org.coords_x, s.org.coords_y),
+                arrowprops=dict(arrowstyle='->', color='blue' if path and s.org in path.path and s.des in path.path else 'gray')
+            )
+            self.ax1.text(
+                (s.org.coords_x + s.des.coords_x) / 2,
+                (s.org.coords_y + s.des.coords_y) / 2,
+                f"{s.cost}",
+                ha='center',
+                va='bottom'
+            )
+        self.canvas.draw()
+        try:
+            origin = simpledialog.askstring("Input", "Enter origin node name:")
+            if origin is None:
+                messagebox.showerror("Error", "Nodes must be registered or check the name.")
+                return
+            destination = simpledialog.askstring("Input", "Enter destination node name:")
+            if destination is None:
+                messagebox.showerror("Error", "Nodes must be registered or check the name.")
+                return
+        except ValueError:
+            messagebox.showerror("Error", "Invalid nodes.")
+            return
+        org = None
+        for n in self.graph.nodes:
+            if n.name == origin:
+                org = n
+                break
+        dest = None
+        for n in self.graph.nodes:
+            if n.name == destination:
+                dest = n
+                break
+        if org is None or dest is None:
+            messagebox.showerror("Error", "Node not found.")
+            return
+        path = FindShortestPath(self.graph, org, dest)
+        self.clear_graph()
+        # Plot all nodes
+        for n in self.graph.nodes:
+            self.ax1.plot(n.coords_x, n.coords_y, 'ro' if path and n in path.path else 'o', color='gray' if not path or n not in path.path else 'red')
+            self.ax1.text(n.coords_x, n.coords_y + 0.1, n.name, ha='center', va='bottom')
+        # Plot all segments
+        for s in self.graph.segments:
+            self.ax1.annotate(
+                '',
+                xy=(s.des.coords_x, s.des.coords_y),
+                xytext=(s.org.coords_x, s.org.coords_y),
+                arrowprops=dict(arrowstyle='->', color='blue' if path and s.org in path.path and s.des in path.path else 'gray')
+            )
+            self.ax1.text(
+                (s.org.coords_x + s.des.coords_x) / 2,
+                (s.org.coords_y + s.des.coords_y) / 2,
+                f"{s.cost}",
+                ha='center',
+                va='bottom'
+            )
+        self.canvas.draw()
+        try:
+            origin = simpledialog.askstring("Input", "Enter origin node name:")
+            if origin is None:
+                messagebox.showerror("Error", "Nodes must be registered or check the name.")
+                return
+            destination = simpledialog.askstring("Input", "Enter destination node name:")
+            if destination is None:
+                messagebox.showerror("Error", "Nodes must be registered or check the name.")
+                return
+        except ValueError:
+            messagebox.showerror("Error", "Invalid nodes.")
+            return
+        org = None
+        for n in self.graph.nodes:
+            if n.name == origin:
+                org = n
+                break
+        dest = None
+        for n in self.graph.nodes:
+            if n.name == destination:
+                dest = n
+                break
+        if org is None or dest is None:
+            messagebox.showerror("Error", "Node not found.")
+            return
+        path = FindShortestPath(self.graph, org, dest)
+        if path is None: 
+            messagebox.showerror("Log", "There is no path between the nodes.")
+            return
+        self.clear_graph()
+        # Plot the shortest path with arrows
+        for i in range(len(path.path) - 1):
+            org = path.path[i]
+            des = path.path[i + 1]
+            self.ax1.annotate(
+                '',
+                xy=(des.coords_x, des.coords_y),
+                xytext=(org.coords_x, org.coords_y),
+                arrowprops=dict(arrowstyle='->', color='blue')
+            )
+            self.ax1.text(
+                (org.coords_x + des.coords_x) / 2,
+                (org.coords_y + des.coords_y) / 2,
+                f"{Cost(org, des)}",
+                ha='center',
+                va='bottom'
+            )
+        for n in path.path:
+            self.ax1.plot(n.coords_x, n.coords_y, 'ro')
+            self.ax1.text(n.coords_x, n.coords_y + 0.1, n.name, ha='center', va='bottom')
+        self.canvas.draw()
+        try:
+            origin = simpledialog.askstring("Input", "Enter origin node name:")
+            if origin is None:
+                messagebox.showerror("Error", "Nodes must be registered or check the name.")
+                return
+            destination = simpledialog.askstring("Input", "Enter destination node name:")
+            if destination is None:
+                messagebox.showerror("Error", "Nodes must be registered or check the name.")
+                return
+        except ValueError:
+            messagebox.showerror("Error", "Invalid nodes.")
+            return
+        org = None
+        for n in self.graph.nodes:
+            if n.name == origin:
+                org = n
+                break
+        dest = None
+        for n in self.graph.nodes:
+            if n.name == destination:
+                dest = n
+                break
+        if org is None or dest is None:
+            messagebox.showerror("Error", "Node not found.")
+            return
+        path = FindShortestPath(self.graph, org, dest)
+        if path is None: 
+            messagebox.showerror("Log", "There is no path between the nodes.")
+            return
         self.clear_graph()
         PlotPath(self.graph, path, self.ax1)
         self.canvas.draw()

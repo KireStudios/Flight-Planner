@@ -18,6 +18,8 @@ def AddNode(g,n):
 
 def AddSegment(g, nameOriginNode, nameDestinationNode):
     #Buscar si los nombres estan en los nodos del gráfico
+    if nameOriginNode == nameDestinationNode:
+        return False
     org=None
     des=None
     for n in g.nodes:
@@ -52,40 +54,54 @@ def GetClosest(g,x,y):
             node = n
     return node
 
-def Plot(g,ax):
-    for n in g.nodes:#Plot all nodes
-        ax.plot(n.coords_x,n.coords_y,'ro')
-        ax.text(n.coords_x, n.coords_y + (((ax.get_xlim()[1]-ax.get_xlim()[0])**2+(ax.get_ylim()[1]-ax.get_ylim()[0])**2)**0.5)/100, n.name, ha='center', va='bottom')
-    for s in g.segments:#Print all segments
-        ax.plot([s.org.coords_x,s.des.coords_x],[s.org.coords_y,s.des.coords_y],'b-')
-        ax.text((s.org.coords_x+s.des.coords_x)/2,(s.org.coords_y+s.des.coords_y)/2, s.cost, ha='center', va='bottom')#Cambiar esto !!!
+def Plot(g, ax):
+    for n in g.nodes:  # Plot all nodes
+        ax.plot(n.coords_x, n.coords_y, 'ro')
+        ax.text(n.coords_x, n.coords_y + (((ax.get_xlim()[1] - ax.get_xlim()[0])**2 + (ax.get_ylim()[1] - ax.get_ylim()[0])**2)**0.5) / 100, n.name, ha='center', va='bottom')
+    for s in g.segments:  # Print all segments as arrows
+        ax.annotate(
+            '', 
+            xy=(s.des.coords_x, s.des.coords_y), 
+            xytext=(s.org.coords_x, s.org.coords_y),
+            arrowprops=dict(arrowstyle='->', color='blue')
+        )
+        ax.text((s.org.coords_x + s.des.coords_x) / 2, (s.org.coords_y + s.des.coords_y) / 2, s.cost, ha='center', va='bottom')  # Cambiar esto !!!
     ax.grid(True)
     ax.autoscale(enable=True, axis='both', tight=False)
 
-def PlotNode(g,nameOrigin,ax):
-    #Buscar si el nombre del nodo origen esta en los nodos del gráfico
-    find=False
+def PlotNode(g, nameOrigin, ax):
+    # Buscar si el nombre del nodo origen está en los nodos del gráfico
+    find = False
     for n in g.nodes:
-        if n.name == nameOrigin:find=True;org=n;break
-    if not find:return False
-    #Plot origen
-    ax.plot(org.coords_x,org.coords_y,'bo')
+        if n.name == nameOrigin:
+            find = True
+            org = n
+            break
+    if not find:
+        return False
+    # Plot origen
+    ax.plot(org.coords_x, org.coords_y, 'bo')
     ax.text(org.coords_x, org.coords_y + 0.1, org.name, ha='center', va='bottom')
-    #buscar entre todos los nodos del gráfico
+    # Buscar entre todos los nodos del gráfico
     for n in g.nodes:
-        if n == org:#No utilizar el origen aquí
+        if n == org:  # No utilizar el origen aquí
             continue
-        #Plot de los puntos vecinos y la línea que los une
+        # Plot de los puntos vecinos y la línea que los une
         if n in org.neighbors:
-            ax.plot(n.coords_x,n.coords_y,'go')
+            ax.plot(n.coords_x, n.coords_y, 'go')
             ax.text(n.coords_x, n.coords_y + 0.1, n.name, ha='center', va='bottom')
-            AddSegment(g,org,n)
-            segmento = next((s for s in g.segments if (s.org == org and s.des == n) or (s.org == n and s.des == org)), None)#Antes utilizaba index, pero index si no existe da error, este no
-            ax.plot([segmento.org.coords_x,segmento.des.coords_x],[segmento.org.coords_y,segmento.des.coords_y],'r-')
-            ax.text((segmento.org.coords_x+segmento.des.coords_x)/2, (segmento.org.coords_y+segmento.des.coords_y)/2, segmento.cost, ha='center', va='bottom')
-        #Plot de los no vecinos
+            AddSegment(g, org, n)
+            segmento = next((s for s in g.segments if (s.org == org and s.des == n) or (s.org == n and s.des == org)), None)  # Antes utilizaba index, pero index si no existe da error, este no
+            ax.annotate(
+                '', 
+                xy=(segmento.des.coords_x, segmento.des.coords_y), 
+                xytext=(segmento.org.coords_x, segmento.org.coords_y),
+                arrowprops=dict(arrowstyle='->', color='red')
+            )
+            ax.text((segmento.org.coords_x + segmento.des.coords_x) / 2, (segmento.org.coords_y + segmento.des.coords_y) / 2, segmento.cost, ha='center', va='bottom')
+        # Plot de los no vecinos
         else:
-            ax.plot(n.coords_x,n.coords_y,'o',color='gray')
+            ax.plot(n.coords_x, n.coords_y, 'o', color='gray')
             ax.text(n.coords_x, n.coords_y + 0.1, n.name, ha='center', va='bottom')
     ax.grid(True)
     ax.autoscale(enable=True, axis='both', tight=False)
