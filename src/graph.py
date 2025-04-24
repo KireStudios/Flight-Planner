@@ -1,6 +1,8 @@
 from segment import *
 from node import *
+from path import *
 import matplotlib.pyplot as plt
+
 class Graph:
     def __init__(self):
         self.nodes=[]
@@ -146,3 +148,53 @@ def DeleteSegmentByName(g,nameOrg,nameDes):
 def DeleteSegment(g,s):
     s.org.neighbors.remove(s.des)
     g.segments.remove(s)
+
+def Reachability(g, origin):
+    path = Path([])
+    # Initialize the queue and the visited nodes
+    queue = [origin]
+    visited = set()
+    while queue:
+        current_node = queue.pop(0)
+        visited.add(current_node)
+        for neighbor in current_node.neighbors:
+            if neighbor not in visited:
+                queue.append(neighbor)
+                path.AddNodeToPath(neighbor)
+    if len(path.path) > 0:
+        return path
+    return None
+
+def FindShortestPath(g, origin, destination):
+    # Initialize the list of paths and the visited nodes
+    paths = []
+    path = Path([])
+    path.AddNodeToPath(origin)
+    # Check if the origin and destination are in the graph
+    if origin not in g.nodes or destination not in g.nodes:
+        return None
+    # Check if the origin and destination are the same
+    if origin == destination:
+        path.AddNodeToPath(destination)
+        return path
+    # Add the path to the list of paths
+    paths.append(path)
+    while paths:
+        # Get the path with the lowest estimated cost
+        min_path = min(paths, key=lambda p: p.cost)
+        paths.remove(min_path)
+        last_node = min_path.path[-1]
+        for neighbor in last_node.neighbors:
+            if neighbor == destination:
+                min_path.AddNodeToPath(neighbor)
+                return min_path
+            if neighbor not in min_path.path:
+                new_path = Path(min_path.path.copy())
+                new_path.AddNodeToPath(neighbor)
+                new_path.cost += Cost(last_node, neighbor)
+                paths.append(new_path)
+            else:
+                for p in paths:
+                    if neighbor in p.path and p.cost > min_path.cost + Cost(last_node, neighbor):
+                        paths.remove(p)
+    return None

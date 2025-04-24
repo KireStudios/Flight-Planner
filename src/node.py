@@ -10,5 +10,9 @@ def AddNeighbor(n1,n2):
         return False
     n1.neighbors.append(n2)
     return True
+
 def Distance(n1,n2):
     return ((n1.coords_x - n2.coords_x)**2 + (n1.coords_y - n2.coords_y)**2)**0.5
+
+def Cost(n1,n2):
+    return Distance(n1,n2)
