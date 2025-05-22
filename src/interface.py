@@ -2,8 +2,11 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from graph import *
-from path import *
+from airSpace import *
+from navPoint import *
+from navSegment import *
+from navAirport import *
+import os
 
 def pulsate_warning(widget, iterations=4, pulse_speed=25):
     # Save original background color
@@ -42,9 +45,11 @@ class GraphVisualizer:
         self.root = root
         self.root.title("Graph Visualizer")
         self.root.geometry("1280x720")
-        self.graph = Graph()
+        self.graph = AirSpace()
         self.cid = None
-        self.file = ''
+        self.nav_points_file = ''
+        self.nav_segments_file = ''
+        self.nav_airports_file = ''
         self.popup_win = None
         self.tquocient = 100
         self.load = False
@@ -93,56 +98,97 @@ class GraphVisualizer:
         if not self.load:
             self.canvas.mpl_disconnect(self.cid_start)
             tk.Button(self.left_frame, text="Save Graph", command=self.GraphSave).pack(pady=5)
-            tk.Button(self.left_frame, text="Reachability", command=self.PlotReachability).pack(pady=5)
-            tk.Button(self.left_frame, text="Shortest Path", command=self.PlotShortestPath).pack(pady=5)
+            tk.Button(self.left_frame, text="Reachability", command=self.PlotReachability_).pack(pady=5)
+            tk.Button(self.left_frame, text="Shortest Path", command=self.PlotShortestPath_).pack(pady=5)
             self.cid = self.fig.canvas.mpl_connect('button_press_event', self.on_click)
             self.text_label.destroy()
     
     # Métodos para las acciones
     def GraphLoad(self):
-        self.file_path = filedialog.askopenfilename(title="Select Graph Data File", filetypes=[("Text Files", "*.txt")])
-        if not self.file_path:
+        carpeta = filedialog.askdirectory(title="Selecciona la carpeta con los archivos .txt")
+        if not carpeta:
+            print("No se ha seleccionado ninguna carpeta.")
+        self.nav_points_file = None
+        self.nav_segments_file = None
+        self.nav_airports_file = None    
+        for archivo in os.listdir(carpeta):
+            ruta_completa = os.path.join(carpeta, archivo)
+            if "nav" in archivo and archivo.endswith(".txt"):
+                self.nav_points_file = ruta_completa 
+            elif "seg" in archivo and archivo.endswith(".txt"):
+                self.nav_segments_file = ruta_completa
+            elif "aer" in archivo and archivo.endswith(".txt"):
+                self.nav_airports_file = ruta_completa
+        # self.nav_points_file = filedialog.askopenfilename(title="Select Graph Data File", filetypes=[("Text Files", "*.txt")])
+        if not self.nav_points_file:
+            print("No se ha seleccionado ningún archivo de puntos.")
             return
-        self.main_widgets()
+        # self.nav_segments_file = filedialog.askopenfilename(title="Select Graph Data File", filetypes=[("Text Files", "*.txt")])
+        if not self.nav_segments_file:
+            print("No se ha seleccionado ningún archivo de segmentos.")
+            return #tenkiu
+        # self.nav_airports_file = filedialog.askopenfilename(title="Select Graph Data File", filetypes=[("Text Files", "*.txt")])
+        if not self.nav_airports_file:
+            print("No se ha seleccionado ningún archivo de aeropuertos.")
+            return 
+        self.main_widgets() 
         self.load = True
-        self.graph = Graph()
-        LoadGraph(self.graph, self.file_path)
         self.clear_graph()
-        Plot(self.graph, self.ax1)
+        self.graph.read_airspace(self.nav_points_file, self.nav_segments_file, self.nav_airports_file)
+        self.clear_graph()
+        self.graph.Plot(self.ax1)
         self.canvas.draw()
     def GraphCreate(self):
         folder_selected = filedialog.askdirectory(title="Select Folder to Save Graph")
         if not folder_selected:
-            messagebox.showerror("Error", "No folder selected.")
+            messagebox.showerror("Error", "No folder selectsed.")
             return
         file_name = simpledialog.askstring("Input", "Enter file name (without extension):")
         if not file_name:
             messagebox.showerror("Error", "No file name entered.")
             return
-        self.file_path = folder_selected + "/" + file_name + ".txt"
+        self.nav_points_file = folder_selected + "/" + file_name + "_nav.txt"
+        self.nav_segments_file = folder_selected + "/" + file_name + "_seg.txt"
+        self.nav_airports_file = folder_selected + "/" + file_name + "_aer.txt"
         self.main_widgets()
         self.load = True
         try:
-            with open(self.file_path, "w") as file:
+            with open(self.nav_airports_file, "w") as file:
+                file.write("")
+            with open(self.nav_points_file, "w") as file:
+                file.write("")
+            with open(self.nav_segments_file, "w") as file:
                 file.write("")
         except Exception as e:
             messagebox.showerror("Error", f"Could not create file: {e}")
             return
-        messagebox.showinfo("Success", f"Graph file created at:\n{self.file_path}")
-        self.graph = Graph()
-        LoadGraph(self.graph, self.file_path)
+        messagebox.showinfo("Success", f"Graph file created at")
+        self.graph.read_airspace(self.nav_points_file, self.nav_segments_file, self.nav_airports_file)
         self.clear_graph()
-        Plot(self.graph, self.ax1)
+        self.graph.Plot(self.ax1)
         self.canvas.draw()
     def GraphSave(self):
-        try:
-            name = simpledialog.askstring("Input", "Enter file name:")
-        except:
-            messagebox.showerror("Error", "Invalid name.")
-            return
-        parts=self.file_path.split('/')
-        parts[-1] = name
-        SaveGraph(self.graph,'/'.join(parts)+'.txt')
+        carpeta = filedialog.askdirectory(title="Selecciona la carpeta con los archivos .txt")
+        if not carpeta:
+            print("No se ha seleccionado ninguna carpeta.")
+        self.nav_points_file = None
+        self.nav_segments_file = None
+        self.nav_airports_file = None    
+        for archivo in os.listdir(carpeta):
+            ruta_completa = os.path.join(carpeta, archivo)
+            if "nav" in archivo and archivo.endswith(".txt"):
+                self.nav_points_file = ruta_completa 
+            elif "seg" in archivo and archivo.endswith(".txt"):
+                self.nav_segments_file = ruta_completa
+            elif "aer" in archivo and archivo.endswith(".txt"):
+                self.nav_airports_file = ruta_completa
+        if not self.nav_points_file:
+            self.nav_points_file = os.join(carpeta, "nav.txt")
+        if not self.nav_segments_file:
+            self.nav_segments_file = os.join(carpeta, "seg.txt")
+        if not self.nav_airports_file:
+            self.nav_airports_file = os.join(carpeta, "aer.txt")
+        self.graph.save_graph([self.nav_points_file,self.nav_segments_file,self.nav_airports_file])
 
     def PopupSelect(self,x,y,button,event):
         self.popup_win = tk.Toplevel()
@@ -151,7 +197,7 @@ class GraphVisualizer:
         if button == 1:
             neighbors = tk.Button(self.popup_win, text="Neighbors", command=lambda:[self.NodeNeighbors_(event),self.popup_win.destroy()])
             neighbors.grid(row=0, column=0,sticky="nsew")
-            node = tk.Button(self.popup_win, text="Node", command=lambda:[self.AddNode_(event),self.popup_win.destroy()])
+            node = tk.Button(self.popup_win, text="Node", command=lambda:[self.AddNavPoint_(event),self.popup_win.destroy()])
             node.grid(row=1, column=0, sticky="nsew")
             segment = tk.Button(self.popup_win, text="Segment", command=lambda:[self.AddSegment_(),self.popup_win.destroy()])
             segment.grid(row=0, column=1,sticky="nsew")
@@ -165,76 +211,89 @@ class GraphVisualizer:
             segment = tk.Button(self.popup_win, text="Exit", command=lambda:self.popup_win.destroy())
             segment.grid(row=1, column=0,sticky="nsew")
 
-    def NodeNeighbors_(self,event):
+    def NodeNeighbors_(self,event): #FUNCIONA
         if event.inaxes != self.ax1:
             return
         min_dist = float('inf')
-        selected_node = None
-        for node in self.graph.nodes:
-            dist = ((event.xdata - node.coords_x) ** 2 + (event.ydata - node.coords_y) ** 2) ** 0.5
+        selected_point = None
+        for point in self.graph.pts:
+            dist = ((event.xdata - point.lon) ** 2 + (event.ydata - point.lat) ** 2) ** 0.5
             if dist < min_dist and dist < 1:
                 min_dist = dist
-                selected_node = node
-        if selected_node:
+                selected_point = point
+        print(selected_point)
+        if selected_point:
             self.clear_graph()
-            PlotNode(self.graph, selected_node.name, self.ax1)
+            self.graph.PlotNeighbors(self.ax1,selected_point.number)
             self.canvas.draw()
-    def AddNode_(self,event):
+    def AddNavPoint_(self,event): #FUNCIONA
         try:
-            name = simpledialog.askstring("Input", "Enter origin node name:")
+            code = simpledialog.askinteger("Input", "Enter point code:")
+            name = simpledialog.askstring("Input", "Enter point name:")
+        except ValueError:
+            messagebox.showerror("Error", "Invalid entry.")
+            return
+        if name is None or code is None: return
+        print(event.xdata,event.ydata)
+        self.clear_graph()
+        self.graph.AddNavPoint(NavPoint(code,str(name),event.ydata,event.xdata))
+        self.graph.Plot(self.ax1)
+        # self.graph.save_graph([self.nav_points_file,self.nav_segments_file,self.nav_airports_file]) #Para guardado automatico
+        self.canvas.draw()
+    def AddSegment_(self): #FUNCIONA
+        try:
+            c1 = simpledialog.askinteger("Input", "Enter origin point code:")
+            if c1 is None:
+                messagebox.showerror("Error", "Point must be registered or check the name.")
+                return
+            c2 = simpledialog.askinteger("Input", "Enter destination point code:")
+            if c2 is None:
+                messagebox.showerror("Error", "Nodes must be registered or check the name.")
+                return
         except ValueError:
             messagebox.showerror("Error", "Invalid nodes.")
             return
-        if name is None: return
+        if c1 == None or c2 == None: return
         self.clear_graph()
-        AddNode(self.graph,Node(str(name),event.xdata,event.ydata))
-        Plot(self.graph, self.ax1)
+        self.graph.AddNavSegment(c1, c2)
+        self.graph.Plot(self.ax1)
         self.canvas.draw()
-    def AddSegment_(self):
-        try:
-            n1 = simpledialog.askstring("Input", "Enter origin node name:")
-            if n1 is None:
-                messagebox.showerror("Error", "Nodes must be registered or check the name.")
-                return
-            n2 = simpledialog.askstring("Input", "Enter destination node name:")
-            if n2 is None:
-                messagebox.showerror("Error", "Nodes must be registered or check the name.")
-                return
-        except ValueError:
-            messagebox.showerror("Error", "Invalid nodes.")
-            return
-        if n1 == None or n2 == None: return
-        self.clear_graph()
-        AddSegment(self.graph, n1, n2)
-        Plot(self.graph, self.ax1)
-        self.canvas.draw()
-    def DeleteNode_(self,event):
+    def DeleteNode_(self,event): #FUNCIONA
         min_dist = (((self.ax1.get_xlim()[1]-self.ax1.get_xlim()[0])**2+(self.ax1.get_ylim()[1]-self.ax1.get_ylim()[0])**2)**0.5)/self.tquocient
-        selected_node = None
-        for node in self.graph.nodes:
-            dist = ((event.xdata - node.coords_x) ** 2 + (event.ydata - node.coords_y) ** 2) ** 0.5
+        selected_point = None
+        for point in self.graph.pts:
+            dist = ((event.xdata - point.lon) ** 2 + (event.ydata - point.lat) ** 2) ** 0.5
             if dist < min_dist:
                 min_dist = dist
-                selected_node = node
-        if selected_node:
-            DeleteNode(self.graph, selected_node)
+                selected_point = point
+        if selected_point:
+            self.graph.DeleteNavPoint(selected_point)
 
             self.clear_graph()
-            Plot(self.graph, self.ax1)
+            self.graph.Plot(self.ax1)
             self.canvas.draw()
-    def DeleteSegment_(self,event):
+    def DeleteSegment_(self,event):#HAY QUE CAMBIARLO HAY VARIOS SEGMENTOS CON LA MISMA DIRECCION Y PUNTO DE INICIO
         min_dist = (((self.ax1.get_xlim()[1]-self.ax1.get_xlim()[0])**2+(self.ax1.get_ylim()[1]-self.ax1.get_ylim()[0])**2)**0.5)/self.tquocient
-        segment = None
-        for s in self.graph.segments:
-            dist=abs((s.des.coords_y - s.org.coords_y) * (event.xdata - s.org.coords_x) - (s.des.coords_x - s.org.coords_x) * (event.ydata - s.org.coords_y)) / ((s.des.coords_y - s.org.coords_y)**2 + (s.des.coords_x - s.org.coords_x)**2)**0.5
+        segment = []
+        for s in self.graph.seg:
+            for p in self.graph.pts:
+                if p.number == s.org:
+                    org = p
+                elif p.number == s.des:
+                    des = p
+            dist=abs((des.lat - org.lat) * (event.xdata - org.lon) - (des.lon - org.lon) * (event.ydata - org.lat)) / ((des.lat - org.lat)**2 + (des.lon - org.lon)**2)**0.5
             if dist<min_dist:
                 min_dist=dist
-                segment = s
-        if segment:
-                DeleteSegmentByName(self.graph,segment.org.name,segment.des.name)
-
+                segment.append(s)
+        print(segment)
+        if segment[0]:
                 self.clear_graph()
-                Plot(self.graph, self.ax1)
+                self.graph.seg.remove(segment[0])
+                print(self.graph.seg)
+                if segment[1].org == segment[0].des and segment[1].des == segment[0].org:
+                    self.graph.seg.remove(segment[1])
+                # self.DeleteSegmentByName(segment.org,segment.des)
+                self.graph.Plot(self.ax1)
                 self.canvas.draw()
  
     def on_click(self,event):
@@ -245,277 +304,38 @@ class GraphVisualizer:
             y = self.canvas.get_tk_widget().winfo_rooty()+self.canvas.get_tk_widget().winfo_height()-event.y
         self.PopupSelect(x,y,event.button,event)
 
-    def PlotReachability(self):
+    def PlotReachability_(self): #FUNCIONA
         try:
-            nodeName = simpledialog.askstring("Input", "Enter origin node name:")
-            if nodeName is None:
-                messagebox.showerror("Error", "Nodes must be registered or check the name.")
+            point = simpledialog.askstring("Input", "Enter origin name:")
+            if point is None:
+                messagebox.showerror("Error", "Point must be registered or check the code.")
                 return
         except ValueError:
-            messagebox.showerror("Error", "Invalid nodes.")
+            messagebox.showerror("Error", "Invalid point.")
             return
-        node = None
-        for n in self.graph.nodes:
-            if n.name == nodeName:
-                node = n
-                break
-        if node is None:
-            messagebox.showerror("Error", "Node not found.")
-            return
-        path = Reachability(self.graph, node)
         self.clear_graph()
-        # Plot all nodes
-        for n in self.graph.nodes:
-            if n in path.path:
-                self.ax1.plot(n.coords_x, n.coords_y, 'ro')  # Red for reachable nodes
-            else:
-                self.ax1.plot(n.coords_x, n.coords_y, 'o', color='gray')  # Gray for non-reachable nodes
-            self.ax1.text(n.coords_x, n.coords_y + 0.1, n.name, ha='center', va='bottom')
-        # Plot all segments
-        for s in self.graph.segments:
-            self.ax1.annotate(
-                '',
-                xy=(s.des.coords_x, s.des.coords_y),
-                xytext=(s.org.coords_x, s.org.coords_y),
-                arrowprops=dict(arrowstyle='->', color='green' if s.org in path.path and s.des in path.path else 'gray')
-            )
-            self.ax1.text(
-                (s.org.coords_x + s.des.coords_x) / 2,
-                (s.org.coords_y + s.des.coords_y) / 2,
-                f"{s.cost}",
-                ha='center',
-                va='bottom'
-            )
+        self.graph.PlotReachability(self.ax1, point)
         self.canvas.draw()
-    
-    def PlotShortestPath(self):
+
+    def PlotShortestPath_(self): #FUNCIONA
         try:
-            origin = simpledialog.askstring("Input", "Enter origin node name:")
+            origin = simpledialog.askstring("Input", "Enter origin name:")
             if origin is None:
-                messagebox.showerror("Error", "Nodes must be registered or check the name.")
+                messagebox.showerror("Error", "Point must be registered or check the code.")
                 return
-            destination = simpledialog.askstring("Input", "Enter destination node name:")
+            destination = simpledialog.askstring("Input", "Enter destination name:")
             if destination is None:
-                messagebox.showerror("Error", "Nodes must be registered or check the name.")
+                messagebox.showerror("Error", "Point must be registered or check the code.")
                 return
         except ValueError:
-            messagebox.showerror("Error", "Invalid nodes.")
-            return
-        org = None
-        for n in self.graph.nodes:
-            if n.name == origin:
-                org = n
-                break
-        dest = None
-        for n in self.graph.nodes:
-            if n.name == destination:
-                dest = n
-                break
-        if org is None or dest is None:
-            messagebox.showerror("Error", "Node not found.")
-            return
-        path = FindShortestPath(self.graph, org, dest)
-        self.clear_graph()
-        # Plot all nodes
-        for n in self.graph.nodes:
-            if path and n in path.path:
-                self.ax1.plot(n.coords_x, n.coords_y, 'ro')  # Red for nodes in the shortest path
-            else:
-                self.ax1.plot(n.coords_x, n.coords_y, 'o', color='gray')  # Gray for other nodes
-            self.ax1.text(n.coords_x, n.coords_y + 0.1, n.name, ha='center', va='bottom')
-        # Plot all segments
-        for s in self.graph.segments:
-            self.ax1.annotate(
-                '',
-                xy=(s.des.coords_x, s.des.coords_y),
-                xytext=(s.org.coords_x, s.org.coords_y),
-                arrowprops=dict(arrowstyle='->', color='blue' if path and s.org in path.path and s.des in path.path else 'gray')
-            )
-            self.ax1.text(
-                (s.org.coords_x + s.des.coords_x) / 2,
-                (s.org.coords_y + s.des.coords_y) / 2,
-                f"{s.cost}",
-                ha='center',
-                va='bottom'
-            )
-        self.canvas.draw()
-        try:
-            origin = simpledialog.askstring("Input", "Enter origin node name:")
-            if origin is None:
-                messagebox.showerror("Error", "Nodes must be registered or check the name.")
-                return
-            destination = simpledialog.askstring("Input", "Enter destination node name:")
-            if destination is None:
-                messagebox.showerror("Error", "Nodes must be registered or check the name.")
-                return
-        except ValueError:
-            messagebox.showerror("Error", "Invalid nodes.")
-            return
-        org = None
-        for n in self.graph.nodes:
-            if n.name == origin:
-                org = n
-                break
-        dest = None
-        for n in self.graph.nodes:
-            if n.name == destination:
-                dest = n
-                break
-        if org is None or dest is None:
-            messagebox.showerror("Error", "Node not found.")
-            return
-        path = FindShortestPath(self.graph, org, dest)
-        self.clear_graph()
-        # Plot all nodes
-        for n in self.graph.nodes:
-            self.ax1.plot(n.coords_x, n.coords_y, 'ro' if path and n in path.path else 'o')  # Removed redundant color argument
-            self.ax1.text(n.coords_x, n.coords_y + 0.1, n.name, ha='center', va='bottom')
-        # Plot all segments
-        for s in self.graph.segments:
-            self.ax1.annotate(
-                '',
-                xy=(s.des.coords_x, s.des.coords_y),
-                xytext=(s.org.coords_x, s.org.coords_y),
-                arrowprops=dict(arrowstyle='->', color='blue' if path and s.org in path.path and s.des in path.path else 'gray')
-            )
-            self.ax1.text(
-                (s.org.coords_x + s.des.coords_x) / 2,
-                (s.org.coords_y + s.des.coords_y) / 2,
-                f"{s.cost}",
-                ha='center',
-                va='bottom'
-            )
-        self.canvas.draw()
-        try:
-            origin = simpledialog.askstring("Input", "Enter origin node name:")
-            if origin is None:
-                messagebox.showerror("Error", "Nodes must be registered or check the name.")
-                return
-            destination = simpledialog.askstring("Input", "Enter destination node name:")
-            if destination is None:
-                messagebox.showerror("Error", "Nodes must be registered or check the name.")
-                return
-        except ValueError:
-            messagebox.showerror("Error", "Invalid nodes.")
-            return
-        org = None
-        for n in self.graph.nodes:
-            if n.name == origin:
-                org = n
-                break
-        dest = None
-        for n in self.graph.nodes:
-            if n.name == destination:
-                dest = n
-                break
-        if org is None or dest is None:
-            messagebox.showerror("Error", "Node not found.")
-            return
-        path = FindShortestPath(self.graph, org, dest)
-        self.clear_graph()
-        # Plot all nodes
-        for n in self.graph.nodes:
-            self.ax1.plot(n.coords_x, n.coords_y, 'ro' if path and n in path.path else 'o', color='gray' if not path or n not in path.path else 'red')
-            self.ax1.text(n.coords_x, n.coords_y + 0.1, n.name, ha='center', va='bottom')
-        # Plot all segments
-        for s in self.graph.segments:
-            self.ax1.annotate(
-                '',
-                xy=(s.des.coords_x, s.des.coords_y),
-                xytext=(s.org.coords_x, s.org.coords_y),
-                arrowprops=dict(arrowstyle='->', color='blue' if path and s.org in path.path and s.des in path.path else 'gray')
-            )
-            self.ax1.text(
-                (s.org.coords_x + s.des.coords_x) / 2,
-                (s.org.coords_y + s.des.coords_y) / 2,
-                f"{s.cost}",
-                ha='center',
-                va='bottom'
-            )
-        self.canvas.draw()
-        try:
-            origin = simpledialog.askstring("Input", "Enter origin node name:")
-            if origin is None:
-                messagebox.showerror("Error", "Nodes must be registered or check the name.")
-                return
-            destination = simpledialog.askstring("Input", "Enter destination node name:")
-            if destination is None:
-                messagebox.showerror("Error", "Nodes must be registered or check the name.")
-                return
-        except ValueError:
-            messagebox.showerror("Error", "Invalid nodes.")
-            return
-        org = None
-        for n in self.graph.nodes:
-            if n.name == origin:
-                org = n
-                break
-        dest = None
-        for n in self.graph.nodes:
-            if n.name == destination:
-                dest = n
-                break
-        if org is None or dest is None:
-            messagebox.showerror("Error", "Node not found.")
-            return
-        path = FindShortestPath(self.graph, org, dest)
-        if path is None: 
-            messagebox.showerror("Log", "There is no path between the nodes.")
+            messagebox.showerror("Error", "Invalid points.")
             return
         self.clear_graph()
-        # Plot the shortest path with arrows
-        for i in range(len(path.path) - 1):
-            org = path.path[i]
-            des = path.path[i + 1]
-            self.ax1.annotate(
-                '',
-                xy=(des.coords_x, des.coords_y),
-                xytext=(org.coords_x, org.coords_y),
-                arrowprops=dict(arrowstyle='->', color='blue')
-            )
-            self.ax1.text(
-                (org.coords_x + des.coords_x) / 2,
-                (org.coords_y + des.coords_y) / 2,
-                f"{Cost(org, des)}",
-                ha='center',
-                va='bottom'
-            )
-        for n in path.path:
-            self.ax1.plot(n.coords_x, n.coords_y, 'ro')
-            self.ax1.text(n.coords_x, n.coords_y + 0.1, n.name, ha='center', va='bottom')
+        path=self.graph.FindShortestPath(origin, destination)
+        self.graph.PlotPath(self.ax1, path)
         self.canvas.draw()
-        try:
-            origin = simpledialog.askstring("Input", "Enter origin node name:")
-            if origin is None:
-                messagebox.showerror("Error", "Nodes must be registered or check the name.")
-                return
-            destination = simpledialog.askstring("Input", "Enter destination node name:")
-            if destination is None:
-                messagebox.showerror("Error", "Nodes must be registered or check the name.")
-                return
-        except ValueError:
-            messagebox.showerror("Error", "Invalid nodes.")
-            return
-        org = None
-        for n in self.graph.nodes:
-            if n.name == origin:
-                org = n
-                break
-        dest = None
-        for n in self.graph.nodes:
-            if n.name == destination:
-                dest = n
-                break
-        if org is None or dest is None:
-            messagebox.showerror("Error", "Node not found.")
-            return
-        path = FindShortestPath(self.graph, org, dest)
-        if path is None: 
-            messagebox.showerror("Log", "There is no path between the nodes.")
-            return
-        self.clear_graph()
-        PlotPath(self.graph, path, self.ax1)
-        self.canvas.draw()
+
+    #Version 4 ideas: Añadir 3 stage switch con el que se muestre el code, name o code y name, encima de cada punto
 
 root = tk.Tk()
 app = GraphVisualizer(root)
