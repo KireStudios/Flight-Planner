@@ -1,0 +1,948 @@
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox, simpledialog
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from airSpace import *
+from navPoint import *
+from navSegment import *
+from navAirport import *
+import os
+
+def pulsate_warning(widget, iterations=4, pulse_speed=25):
+    style = widget.cget('style') or 'Header.TLabel'
+    temp_style = style + ".Warning"
+    s = ttk.Style()
+    original_fg = s.lookup(style, 'foreground') or "#000000"
+    # Ensure the temp style has the same layout as the base style
+    try:
+        s.layout(temp_style)
+    except tk.TclError:
+        s.layout(temp_style, s.layout(style))
+        s.configure(temp_style, **s.configure(style))
+    step = [0]
+    count = [0]
+
+    def pulse_step():
+        intensity = ((step[0] % 100) / 100)
+        # Red color with varying intensity
+        red = 255
+        green = max(0, min(255, int(255 * (1 - intensity * 0.8))))
+        blue = max(0, min(255, int(255 * (1 - intensity * 0.8))))
+        color = f"#{red:02x}{green:02x}{blue:02x}"
+        s.configure(temp_style, foreground=color)
+        widget.configure(style=temp_style)
+        if step[0] % 100 == 0:
+            count[0] += 1
+        if count[0] >= iterations:
+            s.configure(temp_style, foreground=original_fg)
+            widget.configure(style=style)
+        else:
+            step[0] += 5
+            widget.after(pulse_speed, pulse_step)
+    pulse_step()
+
+class GraphVisualizer:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Flight Planner")
+        self.root.geometry("1280x720")
+        self.graph = AirSpace()
+        self.cid = None
+        self.nav_points_file = ''
+        self.nav_segments_file = ''
+        self.nav_airports_file = ''
+        self.popup_win = None
+        self.tquocient = 100
+        self.load = False
+        self.cycle_count = 0
+        self.selected_point = None
+        self.info_widgets = {}
+        self.route_origin = None
+        self.route_selecting = False
+
+        # Set ttk theme
+        style = ttk.Style(self.root)
+        style.theme_use('clam')
+        style.configure('TButton', font=('Segoe UI', 11), padding=8)
+        style.configure('TLabel', font=('Segoe UI', 12))
+        style.configure('Header.TLabel', font=('Segoe UI', 18, 'bold'))
+
+        self.create_layout()
+
+    def create_layout(self):
+        """ Create the main interface structure with modern look """
+        # Top header
+        self.header_frame = ttk.Frame(self.root, padding=(10, 10))
+        self.header_frame.pack(side="top", fill="x")
+        ttk.Label(self.header_frame, text="Flight Planner", style='Header.TLabel').pack(side="left")
+
+        # Main content frames
+        self.left_frame = ttk.Frame(self.root, padding=(10, 10))
+        self.left_frame.pack(side="left", fill="y")
+
+        self.right_frame = ttk.Frame(self.root, padding=(10, 10))
+        self.right_frame.pack(side="right", fill="y")
+
+        # Center panel: use a Notebook for tabs
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(side="left", expand=True, fill="both")
+
+        self.center_frame = ttk.Frame(self.notebook, padding=(10, 10))
+        self.notebook.add(self.center_frame, text="Graph")
+
+        # Route planner tab (created when needed)
+        self.route_frame = None
+
+        self.initial_widgets()
+
+    def initial_widgets(self):
+        """ Add buttons and graph area with modern style """
+    
+        # Left panel buttons
+        ttk.Button(self.left_frame, text="File...", command=self.PopupFile).pack(pady=10, fill="x")
+        self.save_btn = ttk.Button(self.left_frame, text="Save Graph", command=self.GraphSaveDirect)
+        self.export_btn = ttk.Button(self.left_frame, text="Export to Google Earth", command=self.export_to_google_earth)
+        # Do not pack save_btn, export_btn, or reset_btn yet
+
+        # Right panel buttons
+        ttk.Button(self.right_frame, text="Exit", command=self.root.quit).pack(pady=10, fill="x")
+        self.reset_btn = ttk.Button(self.right_frame, text="Reset Graph", command=self.reset_graph)
+
+        # Info panel: create but do not pack yet
+        self.info_panel = ttk.Frame(self.right_frame, padding=(10, 10), relief="groove", borderwidth=2)
+        self.selector_frame = ttk.Frame(self.info_panel)
+        ttk.Label(self.selector_frame, text="🔍 Search or select node:", font=('Segoe UI', 11, 'bold')).pack(anchor="w", padx=2)
+        self.node_selector_var = tk.StringVar()
+        self.node_selector = ttk.Combobox(
+            self.selector_frame,
+            textvariable=self.node_selector_var,
+            state="normal",
+            postcommand=self.update_node_selector_values
+        )
+        self.node_selector.pack(fill="x", padx=2, pady=(2, 0))
+        self.node_selector.bind("<<ComboboxSelected>>", self.on_node_selector_change)
+        self.node_selector.bind("<Return>", self.on_node_selector_change)
+        self.node_selector.bind('<KeyRelease>', self.on_node_selector_keyrelease)
+        self.node_selector.bind('<FocusIn>', lambda e: self.update_node_selector_values())
+        # Do not pack selector_frame or info_panel yet
+
+        # Center panel: Matplotlib graph and label
+        self.fig, self.ax1 = plt.subplots(figsize=(6, 5))
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self.center_frame)
+        self.canvas.get_tk_widget().pack(expand=True, fill="both", padx=10, pady=10)
+
+        self.text_label = ttk.Label(self.center_frame, text="Create or Load a Graph", style='Header.TLabel', anchor="center")
+        self.text_label.pack(expand=True, fill="both", padx=10, pady=10)
+        self.cycle_count = 0
+        self.cid_start = self.fig.canvas.mpl_connect('button_press_event', self.on_click)
+        self.graph_loaded = False
+    
+    def main_widgets(self):
+        # Hide buttons first to avoid duplicates
+        self.save_btn.pack_forget()
+        self.export_btn.pack_forget()
+        self.reset_btn.pack_forget()
+        self.info_panel.pack_forget()
+        self.selector_frame.pack_forget()
+
+        # Always destroy the text label if it exists
+        if hasattr(self, "text_label") and self.text_label.winfo_exists():
+            self.text_label.destroy()
+
+        if not self.load:
+            self.canvas.mpl_disconnect(self.cid_start)
+            self.cid = self.fig.canvas.mpl_connect('button_press_event', self.on_click)
+        # Show Save, Export, and Reset buttons and info panel
+        self.save_btn.pack(pady=10, fill="x")
+        self.export_btn.pack(pady=10, fill="x")
+        self.reset_btn.pack(pady=10, fill="x")
+        self.info_panel.pack(fill="both", expand=True, pady=(10, 0))
+        self.selector_frame.pack(fill="x", pady=(0, 10))
+        self.graph_loaded = True
+
+    def PopupFile(self):
+        file_win = tk.Toplevel()
+        file_win.geometry(f"+{self.left_frame.winfo_rootx()+80}+{self.left_frame.winfo_rooty()+80}")
+        file_win.wm_overrideredirect(True)
+        ttk.Label(file_win, text="File:").grid(row=0, column=0, columnspan=2, sticky="nsew", pady=(0, 5))
+        ttk.Button(file_win, text="Load Graph", command=lambda: [self.GraphLoad(), file_win.destroy()]).grid(row=1, column=0, sticky="nsew")
+        ttk.Button(file_win, text="Create Graph", command=lambda: [self.GraphCreate(), file_win.destroy()]).grid(row=1, column=1, sticky="nsew")
+        save_as_btn = ttk.Button(file_win, text="Save Graph As...", command=lambda: [self.GraphSaveAs(), file_win.destroy()])
+        save_as_btn.grid(row=2, column=0, columnspan=2, sticky="nsew")
+        if not self.graph_loaded:
+            save_as_btn.state(['disabled'])
+        ttk.Button(file_win, text="Cancel", command=file_win.destroy).grid(row=3, column=0, columnspan=2, sticky="nsew", pady=(5, 0))
+
+    def clear_graph(self):
+        self.ax1.clear()
+        self.ax1.set_title("Graph Visualization")
+        self.ax1.grid(True)
+
+    def PopupSelect(self, x, y, button, event):
+        self.popup_win = tk.Toplevel()
+        self.popup_win.geometry(f"+{int(x)}+{int(y)}")
+        self.popup_win.wm_overrideredirect(True)
+        if button == 1:
+            # First row: Select and Start Route
+            ttk.Button(self.popup_win, text="Select", command=lambda: [self.SelectNode_(event), self.popup_win.destroy()]).grid(row=0, column=0, sticky="nsew")
+            ttk.Button(self.popup_win, text="Start Route from Point", command=lambda: [self.StartRouteFromPoint(event), self.popup_win.destroy()]).grid(row=0, column=1, sticky="nsew")
+            # Second row: Neighbors and Reachability
+            ttk.Button(self.popup_win, text="Neighbors", command=lambda: [self.NodeNeighbors_(event), self.popup_win.destroy()]).grid(row=1, column=0, sticky="nsew")
+            ttk.Button(self.popup_win, text="Reachability", command=lambda: [self.PlotReachabilityNode_(event), self.popup_win.destroy()]).grid(row=1, column=1, sticky="nsew")
+            # Third row: Add and Delete
+            ttk.Button(self.popup_win, text="Add...", command=lambda: [self.popup_win.destroy(), self.PopupAdd(x, y, event)]).grid(row=2, column=0, sticky="nsew")
+            ttk.Button(self.popup_win, text="Delete...", command=lambda: [self.popup_win.destroy(), self.PopupDelete(x, y, event)]).grid(row=2, column=1, sticky="nsew")
+            # Cancel button
+            ttk.Button(self.popup_win, text="Cancel", command=self.popup_win.destroy).grid(row=3, column=0, columnspan=2, sticky="nsew")
+        elif button == 3:
+            ttk.Button(self.popup_win, text="Cancel", command=self.popup_win.destroy).grid(row=0, column=0, columnspan=2, sticky="nsew")
+
+    def PopupAdd(self, x, y, event):
+        add_win = tk.Toplevel()
+        add_win.geometry(f"+{int(x)+40}+{int(y)+40}")
+        add_win.wm_overrideredirect(True)
+        ttk.Label(add_win, text="Add:").grid(row=0, column=0, columnspan=2, sticky="nsew", pady=(0, 5))
+        ttk.Button(add_win, text="NavPoint (Node)", command=lambda: [self.AddNavPoint_(event), add_win.destroy()]).grid(row=1, column=0, sticky="nsew")
+        ttk.Button(add_win, text="NavSegment", command=lambda: [self.AddSegment_(), add_win.destroy()]).grid(row=1, column=1, sticky="nsew")
+        ttk.Button(add_win, text="Cancel", command=add_win.destroy).grid(row=2, column=0, columnspan=2, sticky="nsew", pady=(5, 0))
+
+        # Métodos para las acciones
+    def GraphLoad(self):
+        carpeta = filedialog.askdirectory(title="Selecciona la carpeta con los archivos .txt")
+        if not carpeta:
+            print("No se ha seleccionado ninguna carpeta.")
+        self.nav_points_file = None
+        self.nav_segments_file = None
+        self.nav_airports_file = None    
+        for archivo in os.listdir(carpeta):
+            ruta_completa = os.path.join(carpeta, archivo)
+            if "nav" in archivo and archivo.endswith(".txt"):
+                self.nav_points_file = ruta_completa 
+            elif "seg" in archivo and archivo.endswith(".txt"):
+                self.nav_segments_file = ruta_completa
+            elif "aer" in archivo and archivo.endswith(".txt"):
+                self.nav_airports_file = ruta_completa
+        # self.nav_points_file = filedialog.askopenfilename(title="Select Graph Data File", filetypes=[("Text Files", "*.txt")])
+        if not self.nav_points_file:
+            print("No se ha seleccionado ningún archivo de puntos.")
+            return
+        # self.nav_segments_file = filedialog.askopenfilename(title="Select Graph Data File", filetypes=[("Text Files", "*.txt")])
+        if not self.nav_segments_file:
+            print("No se ha seleccionado ningún archivo de segmentos.")
+            return #tenkiu
+        # self.nav_airports_file = filedialog.askopenfilename(title="Select Graph Data File", filetypes=[("Text Files", "*.txt")])
+        if not self.nav_airports_file:
+            print("No se ha seleccionado ningún archivo de aeropuertos.")
+            return 
+        self.main_widgets() 
+        self.load = True
+        self.clear_graph()
+        self.graph.read_airspace(self.nav_points_file, self.nav_segments_file, self.nav_airports_file)
+        self.clear_graph()
+        self.graph.Plot(self.ax1)
+        self.canvas.draw()
+    def GraphCreate(self):
+        folder_selected = filedialog.askdirectory(title="Select Folder to Save Graph")
+        if not folder_selected:
+            messagebox.showerror("Error", "No folder selected.")
+            return
+        file_name = simpledialog.askstring("Input", "Enter file name (without extension):")
+        if not file_name:
+            messagebox.showerror("Error", "No file name entered.")
+            return
+        self.nav_points_file = os.path.join(folder_selected, file_name + "_nav.txt")
+        self.nav_segments_file = os.path.join(folder_selected, file_name + "_seg.txt")
+        self.nav_airports_file = os.path.join(folder_selected, file_name + "_aer.txt")
+        try:
+            with open(self.nav_airports_file, "w") as file:
+                file.write("")
+            with open(self.nav_points_file, "w") as file:
+                file.write("")
+            with open(self.nav_segments_file, "w") as file:
+                file.write("")
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not create file: {e}")
+            return
+        self.graph = AirSpace()  # Reset to a new, empty graph
+        # --- Insta-save the empty graph ---
+        self.graph.save_graph([self.nav_points_file, self.nav_segments_file, self.nav_airports_file])
+        self.graph_loaded = True
+        self.load = True
+        self.main_widgets()
+        self.clear_graph()
+        self.graph.read_airspace(self.nav_points_file, self.nav_segments_file, self.nav_airports_file)
+        self.graph.Plot(self.ax1)
+        self.canvas.draw()
+
+    def NodeNeighbors_(self,event): #FUNCIONA
+        if event.inaxes != self.ax1:
+            return
+        min_dist = float('inf')
+        selected_point = None
+        for point in self.graph.pts:
+            dist = ((event.xdata - point.lon) ** 2 + (event.ydata - point.lat) ** 2) ** 0.5
+            if dist < min_dist and dist < 1:
+                min_dist = dist
+                selected_point = point
+        print(selected_point)
+        if selected_point:
+            self.clear_graph()
+            self.graph.PlotNeighbors(self.ax1,selected_point.number)
+            self.canvas.draw()
+    def AddNavPoint_(self,event): #FUNCIONA
+        try:
+            code = simpledialog.askinteger("Input", "Enter point code:")
+            name = simpledialog.askstring("Input", "Enter point name:")
+        except ValueError:
+            messagebox.showerror("Error", "Invalid entry.")
+            return
+        if name is None or code is None: return
+        print(event.xdata,event.ydata)
+        self.clear_graph()
+        self.graph.AddNavPoint(NavPoint(code,str(name),event.ydata,event.xdata))
+        self.graph.Plot(self.ax1)
+        # self.graph.save_graph([self.nav_points_file,self.nav_segments_file,self.nav_airports_file]) #Para guardado automatico
+        self.canvas.draw()
+    def AddSegment_(self): #FUNCIONA
+        try:
+            c1 = simpledialog.askinteger("Input", "Enter origin point code:")
+            if c1 is None:
+                messagebox.showerror("Error", "Point must be registered or check the name.")
+                return
+            c2 = simpledialog.askinteger("Input", "Enter destination point code:")
+            if c2 is None:
+                messagebox.showerror("Error", "Nodes must be registered or check the name.")
+                return
+        except ValueError:
+            messagebox.showerror("Error", "Invalid nodes.")
+            return
+        if c1 == None or c2 == None: return
+        self.clear_graph()
+        self.graph.AddNavSegment(c1, c2)
+        self.graph.Plot(self.ax1)
+        self.canvas.draw()
+    def DeleteNode_(self,event): #FUNCIONA
+        min_dist = (((self.ax1.get_xlim()[1]-self.ax1.get_xlim()[0])**2+(self.ax1.get_ylim()[1]-self.ax1.get_ylim()[0])**2)**0.5)/self.tquocient
+        selected_point = None
+        for point in self.graph.pts:
+            dist = ((event.xdata - point.lon) ** 2 + (event.ydata - point.lat) ** 2) ** 0.5
+            if dist < min_dist:
+                min_dist = dist
+                selected_point = point
+        if selected_point:
+            self.graph.DeleteNavPoint(selected_point)
+
+            self.clear_graph()
+            self.graph.Plot(self.ax1)
+            self.canvas.draw()
+    def DeleteSegment_(self,event):#HAY QUE CAMBIARLO HAY VARIOS SEGMENTOS CON LA MISMA DIRECCION Y PUNTO DE INICIO
+        min_dist = (((self.ax1.get_xlim()[1]-self.ax1.get_xlim()[0])**2+(self.ax1.get_ylim()[1]-self.ax1.get_ylim()[0])**2)**0.5)/self.tquocient
+        segment = []
+        for s in self.graph.seg:
+            for p in self.graph.pts:
+                if p.number == s.org:
+                    org = p
+                elif p.number == s.des:
+                    des = p
+            dist=abs((des.lat - org.lat) * (event.xdata - org.lon) - (des.lon - org.lon) * (event.ydata - org.lat)) / ((des.lat - org.lat)**2 + (des.lon - org.lon)**2)**0.5
+            if dist<min_dist:
+                min_dist=dist
+                segment.append(s)
+        print(segment)
+        if segment[0]:
+                self.clear_graph()
+                self.graph.seg.remove(segment[0])
+                print(self.graph.seg)
+                if segment[1].org == segment[0].des and segment[1].des == segment[0].org:
+                    self.graph.seg.remove(segment[1])
+                # self.DeleteSegmentByName(segment.org,segment.des)
+                self.graph.Plot(self.ax1)
+                self.canvas.draw()
+
+    def start_route_from_info(self, point):
+        self.open_route_planner(point)
+
+    def StartRouteFromPoint(self, event):
+        # Find nearest node as origin
+        min_dist = float('inf')
+        origin = None
+        for point in self.graph.pts:
+            dist = ((event.xdata - point.lon) ** 2 + (event.ydata - point.lat) ** 2) ** 0.5
+            if dist < min_dist and dist < 1:
+                min_dist = dist
+                origin = point
+        if origin:
+            self.open_route_planner(origin)
+        else:
+            messagebox.showerror("Error", "No node found at click location.")
+ 
+    def on_click(self,event):
+        if not getattr(self, 'graph_loaded', False):
+            pulsate_warning(self.text_label)
+            self.PopupFile()
+            return
+        if self.popup_win is not None:
+            self.popup_win.destroy()
+        if self.route_selecting:
+            # User is selecting destination for route
+            min_dist = float('inf')
+            dest = None
+            for point in self.graph.pts:
+                dist = ((event.xdata - point.lon) ** 2 + (event.ydata - point.lat) ** 2) ** 0.5
+                if dist < min_dist and dist < 1:
+                    min_dist = dist
+                    dest = point
+            if dest and self.route_origin:
+                self.clear_graph()
+                path = self.graph.FindShortestPath(self.route_origin.name, dest.name)
+                self.graph.PlotPath(self.ax1, path)
+                self.canvas.draw()
+                messagebox.showinfo("Route", f"Route from '{self.route_origin.name}' to '{dest.name}' shown.")
+                self.route_origin = None
+                self.route_selecting = False
+            else:
+                messagebox.showerror("Error", "No node found at click location.")
+                self.route_origin = None
+                self.route_selecting = False
+            return
+        if event.xdata != None or event.ydata != None:
+            x = self.canvas.get_tk_widget().winfo_rootx()+event.x
+            y = self.canvas.get_tk_widget().winfo_rooty()+self.canvas.get_tk_widget().winfo_height()-event.y
+        self.PopupSelect(x,y,event.button,event)
+
+    def PlotReachability_(self): #FUNCIONA
+        try:
+            point = simpledialog.askstring("Input", "Enter origin name:")
+            if point is None:
+                messagebox.showerror("Error", "Point must be registered or check the code.")
+                return
+        except ValueError:
+            messagebox.showerror("Error", "Invalid point.")
+            return
+        self.clear_graph()
+        self.graph.PlotReachability(self.ax1, point)
+        self.canvas.draw()
+
+    def PlotReachabilityNode_(self, event):
+        # Find nearest node to the click
+        min_dist = float('inf')
+        selected_point = None
+        for point in self.graph.pts:
+            dist = ((event.xdata - point.lon) ** 2 + (event.ydata - point.lat) ** 2) ** 0.5
+            if dist < min_dist and dist < 1:
+                min_dist = dist
+                selected_point = point
+        if selected_point:
+            self.clear_graph()
+            self.graph.PlotReachability(self.ax1, selected_point.name)
+            self.canvas.draw()
+        else:
+            messagebox.showerror("Error", "No node found at click location.")
+
+    def PlotShortestPath_(self): #FUNCIONA
+        try:
+            origin = simpledialog.askstring("Input", "Enter origin name:")
+            if origin is None:
+                messagebox.showerror("Error", "Point must be registered or check the code.")
+                return
+            destination = simpledialog.askstring("Input", "Enter destination name:")
+            if destination is None:
+                messagebox.showerror("Error", "Point must be registered or check the code.")
+                return
+        except ValueError:
+            messagebox.showerror("Error", "Invalid points.")
+            return
+        self.clear_graph()
+        path=self.graph.FindShortestPath(origin, destination)
+        self.graph.PlotPath(self.ax1, path)
+        self.canvas.draw()
+
+    def GraphSaveDirect(self):
+        # Save directly to the currently loaded/created files
+        if self.nav_points_file and self.nav_segments_file and self.nav_airports_file:
+            self.graph.save_graph([self.nav_points_file, self.nav_segments_file, self.nav_airports_file])
+            messagebox.showinfo("Saved", "Graph saved successfully.")
+        else:
+            messagebox.showerror("Error", "No graph file loaded or created.")
+
+    def GraphSaveAs(self):
+        # Ask for new folder and base name, then save as new files
+        folder_selected = filedialog.askdirectory(title="Select Folder to Save Graph As")
+        if not folder_selected:
+            return
+        file_name = simpledialog.askstring("Input", "Enter new file name (without extension):")
+        if not file_name:
+            return
+        nav_points_file = os.path.join(folder_selected, file_name + "_nav.txt")
+        nav_segments_file = os.path.join(folder_selected, file_name + "_seg.txt")
+        nav_airports_file = os.path.join(folder_selected, file_name + "_aer.txt")
+        self.graph.save_graph([nav_points_file, nav_segments_file, nav_airports_file])
+        messagebox.showinfo("Saved", f"Graph saved as {file_name} in {folder_selected}")
+
+    def SelectNode_(self, event):
+        # Find nearest node
+        min_dist = float('inf')
+        selected_point = None
+        for point in self.graph.pts:
+            dist = ((event.xdata - point.lon) ** 2 + (event.ydata - point.lat) ** 2) ** 0.5
+            if dist < min_dist and dist < 1:
+                min_dist = dist
+                selected_point = point
+        if selected_point:
+            self.selected_point = selected_point
+            # Set the selector to the selected node and update info panel
+            node_str = f"{selected_point.name} (#{selected_point.number})"
+            self.node_selector_var.set(node_str)
+            self.update_info_panel(selected_point)
+
+    def on_node_selector_change(self, event=None):
+        selected = self.node_selector_var.get()
+        self.show_node_info_from_selector(selected)
+
+    def on_node_selector_keyrelease(self, event):
+        typed = self.node_selector_var.get().lower()
+        all_values = [f"{p.name} (#{p.number})" for p in self.graph.pts]
+        filtered = [v for v in all_values if typed in v.lower()]
+        self.node_selector['values'] = filtered
+
+        if event.keysym in ("Down", "Up"):
+            # Force dropdown to close and reopen to refresh the list
+            if self.node_selector.winfo_ismapped():
+                self.node_selector.event_generate('<Escape>')  # Close dropdown if open
+                self.node_selector.after(1, lambda: self.node_selector.event_generate('<Button-1>'))  # Reopen
+        elif event.keysym == "Return":
+            if len(filtered) == 1:
+                self.node_selector_var.set(filtered[0])
+                self.show_node_info_from_selector(filtered[0])
+            elif len(filtered) > 1:
+                # Force dropdown to close and reopen to refresh the list
+                if self.node_selector.winfo_ismapped():
+                    self.node_selector.event_generate('<Escape>')  # Close dropdown if open
+                    self.node_selector.after(1, lambda: self.node_selector.event_generate('<Button-1>'))  # Reopen
+
+    def update_node_selector_values(self):
+        # Only restore full list if search bar is empty
+        typed = self.node_selector_var.get().strip().lower()
+        if not typed:
+            values = [f"{p.name} (#{p.number})" for p in self.graph.pts]
+            self.node_selector['values'] = values
+        # Otherwise, do nothing (keep filtered list)
+
+    def show_node_info_from_selector(self, selected):
+        # Extract the code from the string (assuming format "name (#code)")
+        if "(" in selected and "#" in selected:
+            try:
+                code = int(selected.split("#")[-1].split(")")[0])
+                for point in self.graph.pts:
+                    if point.number == code:
+                        self.selected_point = point
+                        self.update_info_panel(point)
+                        break
+            except Exception:
+                pass
+
+    def update_info_panel(self, point):
+        # Remove previous info_frame if it exists
+        if hasattr(self, 'info_frame') and self.info_frame.winfo_exists():
+            self.info_frame.destroy()
+        # Node info section
+        self.info_frame = ttk.Frame(self.info_panel)
+        self.info_frame.pack(fill="x", pady=(0, 10))
+        ttk.Label(self.info_frame, text="Node Details", style='Header.TLabel').pack(pady=(0, 10))
+        ttk.Label(self.info_frame, text="Name:").pack(anchor="w")
+        name_var = tk.StringVar(value=point.name)
+        name_entry = ttk.Entry(self.info_frame, textvariable=name_var)
+        name_entry.pack(fill="x")
+        ttk.Label(self.info_frame, text="Latitude:").pack(anchor="w")
+        lat_var = tk.DoubleVar(value=point.lat)
+        lat_entry = ttk.Entry(self.info_frame, textvariable=lat_var)
+        lat_entry.pack(fill="x")
+        ttk.Label(self.info_frame, text="Longitude:").pack(anchor="w")
+        lon_var = tk.DoubleVar(value=point.lon)
+        lon_entry = ttk.Entry(self.info_frame, textvariable=lon_var)
+        lon_entry.pack(fill="x")
+
+        def save_changes():
+            point.name = name_var.get()
+            try:
+                point.lat = float(lat_var.get())
+                point.lon = float(lon_var.get())
+            except ValueError:
+                messagebox.showerror("Error", "Latitude and Longitude must be numbers.")
+                return
+            self.clear_graph()
+            self.graph.Plot(self.ax1)
+            self.canvas.draw()
+            messagebox.showinfo("Saved", "Node info updated.")
+            self.update_node_selector_values()  # Only here, after save
+            self.node_selector_var.set(f"{point.name} (#{point.number})")
+        ttk.Button(self.info_frame, text="Save Changes", command=save_changes).pack(pady=10)
+
+        # --- Add action buttons below ---
+        action_frame1 = ttk.Frame(self.info_frame)
+        action_frame1.pack(fill="x", pady=(5, 0))
+        action_frame2 = ttk.Frame(self.info_frame)
+        action_frame2.pack(fill="x", pady=(0, 5))
+
+        ttk.Button(action_frame1, text="Neighbors", command=lambda: self.show_neighbors(point)).pack(side="left", expand=True, fill="x", padx=2)
+        ttk.Button(action_frame1, text="Reachability", command=lambda: self.show_reachability(point)).pack(side="left", expand=True, fill="x", padx=2)
+        ttk.Button(action_frame2, text="Start Route", command=lambda: self.start_route_from_info(point)).pack(side="left", expand=True, fill="x", padx=2)
+        ttk.Button(action_frame2, text="Delete Node", command=lambda: self.delete_node_from_info(point)).pack(side="left", expand=True, fill="x", padx=2)
+
+    # Helper methods for the info panel actions:
+    def show_neighbors(self, point):
+        self.clear_graph()
+        self.graph.PlotNeighbors(self.ax1, point.number)
+        self.canvas.draw()
+
+    def show_reachability(self, point):
+        self.clear_graph()
+        self.graph.PlotReachability(self.ax1, point.name)
+        self.canvas.draw()
+
+    def delete_node_from_info(self, point):
+        self.graph.DeleteNavPoint(point)
+        self.clear_graph()
+        self.graph.Plot(self.ax1)
+        self.canvas.draw()
+        self.node_selector_var.set("")
+        self.update_node_selector_values()
+        self.info_frame.destroy()
+
+    def reset_graph(self):
+        if self.nav_points_file and self.nav_segments_file and self.nav_airports_file:
+            self.clear_graph()
+            self.graph.read_airspace(self.nav_points_file, self.nav_segments_file, self.nav_airports_file)
+            self.graph.Plot(self.ax1)
+            self.canvas.draw()
+
+    def export_to_google_earth(self):
+        messagebox.showinfo("Exported", f"Graph exported to google earth.\n Pd: Joking, work in progress...")
+
+    def open_route_planner(self, origin_point):
+        # Helper to close the route planner tab and clear reference
+        def close_route_tab():
+            if self.route_frame and self.route_frame.winfo_exists():
+                self.notebook.forget(self.route_frame)
+            self.route_frame = None
+
+        # If already open, close it before opening a new one
+        close_route_tab()
+
+        self.route_frame = ttk.Frame(self.notebook, padding=(10, 10))
+        self.notebook.add(self.route_frame, text="Route Planner")
+        self.notebook.select(self.route_frame)
+
+        ttk.Label(self.route_frame, text=f"Origin: {origin_point.name} (#{origin_point.number})", font=('Segoe UI', 12, 'bold')).pack(anchor="w", pady=(0, 10))
+
+        # Get all reachable nodes from the origin (excluding the origin itself)
+        reachable_points = self.graph.Reachability(origin_point.name)
+        reachable_points = [p for p in reachable_points if p.number != origin_point.number]
+
+        # Destination selector
+        ttk.Label(self.route_frame, text="Destination:").pack(anchor="w")
+        dest_var = tk.StringVar()
+        all_dest_values = [f"{p.name} (#{p.number})" for p in reachable_points]
+        dest_combo = ttk.Combobox(self.route_frame, textvariable=dest_var, values=all_dest_values, state="normal")
+        dest_combo.pack(fill="x", pady=(0, 10))
+
+        def update_dest_combo_values():
+            typed = dest_var.get().lower()
+            filtered = [v for v in all_dest_values if typed in v.lower()]
+            dest_combo['values'] = filtered
+
+        def on_dest_combo_keyrelease(event):
+            update_dest_combo_values()
+            if event.keysym in ("Down", "Up"):
+                if dest_combo.winfo_ismapped():
+                    dest_combo.event_generate('<Escape>')
+                    dest_combo.after(1, lambda: dest_combo.event_generate('<Button-1>'))
+            elif event.keysym == "Return":
+                filtered = dest_combo['values']
+                if isinstance(filtered, str):  # Defensive: can be a string in some Tk versions
+                    filtered = dest_combo['values'] = list(all_dest_values)
+                if len(filtered) == 1:
+                    dest_var.set(filtered[0])
+                elif len(filtered) > 1:
+                    if dest_combo.winfo_ismapped():
+                        dest_combo.event_generate('<Escape>')
+                        dest_combo.after(1, lambda: dest_combo.event_generate('<Button-1>'))
+
+        dest_combo.bind('<KeyRelease>', on_dest_combo_keyrelease)
+        dest_combo.bind('<FocusIn>', lambda e: dest_combo.configure(values=all_dest_values))
+
+        # --- Helper to get NavPoint from string ---
+        def get_point_from_str(s):
+            code = int(s.split("#")[-1].split(")")[0])
+            return next((p for p in self.graph.pts if p.number == code), None)
+
+        # Waypoints (dual-listbox for order control)
+        ttk.Label(self.route_frame, text="Waypoints (optional, in order):").pack(anchor="w")
+        waypoint_frame = ttk.Frame(self.route_frame)
+        waypoint_frame.pack(fill="x", pady=(0, 10))
+        
+        available_listbox = tk.Listbox(waypoint_frame, selectmode="extended", exportselection=False, height=6)
+        waypoint_listbox = tk.Listbox(waypoint_frame, selectmode="extended", exportselection=False, height=6)
+        available_listbox.grid(row=0, column=0, rowspan=4, sticky="nsew", padx=(0, 5))
+        waypoint_listbox.grid(row=0, column=2, rowspan=4, sticky="nsew", padx=(5, 0))
+        waypoint_frame.columnconfigure(0, weight=1)
+        waypoint_frame.columnconfigure(2, weight=1)
+
+        # --- Dynamic available waypoints update ---
+        def update_available_waypoints():
+            # Start from origin or last waypoint
+            if waypoint_listbox.size() > 0:
+                last_str = waypoint_listbox.get(waypoint_listbox.size()-1)
+                last_point = get_point_from_str(last_str)
+            else:
+                last_point = origin_point
+            # Exclude already used waypoints and origin
+            used_codes = {origin_point.number}
+            for i in range(waypoint_listbox.size()):
+                used_codes.add(get_point_from_str(waypoint_listbox.get(i)).number)
+            # Only show reachable and not already used, and can reach destination
+            dest_str = dest_var.get()
+            dest_point = get_point_from_str(dest_str) if dest_str else None
+            reachable = self.graph.Reachability(last_point.name)
+            filtered = []
+            for p in reachable:
+                if p.number not in used_codes and dest_point and self.graph.FindShortestPath(p.name, dest_point.name):
+                    filtered.append(p)
+                elif p.number not in used_codes and not dest_point:
+                    filtered.append(p)
+            available_listbox.delete(0, "end")
+            for p in filtered:
+                available_listbox.insert("end", f"{p.name} (#{p.number})")
+
+        # --- Control buttons ---
+        def add_waypoints():
+            selected = list(available_listbox.curselection())
+            for idx in selected:
+                value = available_listbox.get(idx)
+                if value not in waypoint_listbox.get(0, "end"):
+                    waypoint_listbox.insert("end", value)
+            update_available_waypoints()
+            update_path_preview()
+
+        def remove_waypoints():
+            selected = list(waypoint_listbox.curselection())
+            for idx in reversed(selected):
+                waypoint_listbox.delete(idx)
+            update_available_waypoints()
+            update_path_preview()
+
+        def move_up():
+            selected = list(waypoint_listbox.curselection())
+            for idx in selected:
+                if idx == 0:
+                    continue
+                value = waypoint_listbox.get(idx)
+                waypoint_listbox.delete(idx)
+                waypoint_listbox.insert(idx-1, value)
+                waypoint_listbox.selection_set(idx-1)
+            update_available_waypoints()
+            update_path_preview()
+
+        def move_down():
+            selected = list(waypoint_listbox.curselection())
+            for idx in reversed(selected):
+                if idx == waypoint_listbox.size() - 1:
+                    continue
+                value = waypoint_listbox.get(idx)
+                waypoint_listbox.delete(idx)
+                waypoint_listbox.insert(idx+1, value)
+                waypoint_listbox.selection_set(idx+1)
+            update_available_waypoints()
+            update_path_preview()
+
+        btn_frame = ttk.Frame(waypoint_frame)
+        btn_frame.grid(row=0, column=1, rowspan=4, sticky="ns")
+        ttk.Button(btn_frame, text="Add →", command=add_waypoints).pack(fill="x", pady=2)
+        ttk.Button(btn_frame, text="← Remove", command=remove_waypoints).pack(fill="x", pady=2)
+        ttk.Button(btn_frame, text="Up", command=move_up).pack(fill="x", pady=2)
+        ttk.Button(btn_frame, text="Down", command=move_down).pack(fill="x", pady=2)
+
+        # --- Initial population ---
+        update_available_waypoints()
+
+        # --- In calculate_route, validate each segment ---
+        def calculate_route():
+            dest = dest_var.get()
+            if not dest:
+                messagebox.showerror("Error", "Please select a destination.")
+                return
+            dest_point = get_point_from_str(dest)
+            if not dest_point:
+                messagebox.showerror("Error", "Destination not found.")
+                return
+
+            # Get waypoints in order
+            selected_waypoints = [waypoint_listbox.get(i) for i in range(waypoint_listbox.size())]
+            waypoints = []
+            for wp_str in selected_waypoints:
+                wp_point = get_point_from_str(wp_str)
+                if wp_point and wp_point != origin_point and wp_point != dest_point:
+                    waypoints.append(wp_point)
+
+            # Build full route: origin -> waypoints... -> destination
+            route_points = [origin_point] + waypoints + [dest_point]
+            full_path = []
+            for i in range(len(route_points) - 1):
+                segment = self.graph.FindShortestPath(route_points[i].name, route_points[i+1].name)
+                if not segment:
+                    messagebox.showerror("Error", f"No path between {route_points[i].name} and {route_points[i+1].name}.")
+                    return
+                if i > 0:
+                    segment = segment[1:]
+                full_path.extend(segment)
+
+            # Plot the route on the main graph tab
+            self.notebook.select(self.center_frame)
+            self.clear_graph()
+            self.graph.PlotPath(self.ax1, full_path)
+            self.canvas.draw()
+            # messagebox.showinfo("Route", f"Route from '{origin_point.name}' to '{dest_point.name}' calculated and shown.")
+
+        ttk.Button(self.route_frame, text="Calculate Route", command=calculate_route).pack(pady=10)
+        ttk.Button(self.route_frame, text="Close", command=close_route_tab).pack()
+
+        # --- Path preview label and cost ---
+        path_preview_frame = ttk.Frame(self.route_frame)
+        path_preview_frame.pack(fill="x", pady=(10, 0))
+        path_preview_label = ttk.Label(path_preview_frame, text="Current Path Preview:", font=('Segoe UI', 11, 'italic'))
+        path_preview_label.pack(side="left")
+        cost_var = tk.StringVar()
+        cost_label = ttk.Label(path_preview_frame, textvariable=cost_var, font=('Segoe UI', 11, 'italic'))
+        cost_label.pack(side="right")
+
+        path_preview_text = tk.Text(self.route_frame, height=2, font=('Segoe UI', 11), relief="flat")
+        path_preview_text.pack(fill="x", pady=(0, 10))
+        path_preview_text.tag_configure("bold", font=('Segoe UI', 11, 'bold'))
+        path_preview_text.config(state="disabled")
+
+        def update_path_preview():
+            dest_str = dest_var.get()
+            if not dest_str:
+                names = [origin_point.name]
+                bold_indices = {0}
+                total_cost = 0
+            else:
+                dest_point = get_point_from_str(dest_str)
+                # Get user waypoints
+                user_waypoints = []
+                for i in range(waypoint_listbox.size()):
+                    wp_str = waypoint_listbox.get(i)
+                    wp_point = get_point_from_str(wp_str)
+                    if wp_point:
+                        user_waypoints.append(wp_point)
+                # Build full route: origin -> waypoints... -> destination
+                route_points = [origin_point] + user_waypoints + [dest_point]
+                full_path = []
+                bold_indices = set()
+                total_cost = 0
+                path_index = 0
+                # Indices in route_points of user waypoints
+                user_wp_indices = [i+1 for i in range(len(user_waypoints))]
+                # For bold: always mark 0 (origin), user waypoints at their segment start, and last (destination)
+                for i in range(len(route_points) - 1):
+                    segment = self.graph.FindShortestPath(route_points[i].name, route_points[i+1].name)
+                    if not segment:
+                        full_path = [p.name for p in route_points[:i+1]]
+                        break
+                    # For cost: sum the cost of each segment in the path
+                    for i in range(len(segment)-1):
+                        seg = next((s for s in self.graph.seg if (s.org == segment[i].number and s.des == segment[i+1].number)), None)
+                        total_cost += seg.dis
+                    # For path, skip first node except for the first segment
+                    if i > 0:
+                        segment = segment[1:]
+                        # For bold: mark the first node of each segment
+                        bold_indices.add(path_index-1)
+                    for j, p in enumerate(segment):
+                        full_path.append(p.name)                            
+                        path_index += 1
+                names = full_path
+                # Always mark first and last node (destination) in bold
+                if names:
+                    bold_indices.add(0)
+                    bold_indices.add(len(names)-1)
+            # Update the cost label
+            cost_var.set(f"Total cost: {total_cost}")
+            # Update the Text widget
+            path_preview_text.config(state="normal")
+            path_preview_text.delete("1.0", "end")
+            for i, name in enumerate(names):
+                if i > 0:
+                    path_preview_text.insert("end", "  →  ")
+                if i in bold_indices:
+                    path_preview_text.insert("end", name, "bold")
+                else:
+                    path_preview_text.insert("end", name)
+            path_preview_text.config(state="disabled")
+
+        # Bind updates to changes in waypoints and destination
+        waypoint_listbox.bind('<<ListboxSelect>>', lambda e: update_path_preview())
+        waypoint_listbox.bind('<KeyRelease>', lambda e: update_path_preview())
+        waypoint_listbox.bind('<ButtonRelease-1>', lambda e: update_path_preview())
+        available_listbox.bind('<ButtonRelease-1>', lambda e: update_path_preview())
+        dest_var.trace_add('write', lambda *a: update_path_preview())
+
+        # Also call after any add/remove/move operation
+        def add_waypoints():
+            selected = list(available_listbox.curselection())
+            for idx in selected:
+                value = available_listbox.get(idx)
+                if value not in waypoint_listbox.get(0, "end"):
+                    waypoint_listbox.insert("end", value)
+            update_available_waypoints()
+            update_path_preview()
+
+        def remove_waypoints():
+            selected = list(waypoint_listbox.curselection())
+            for idx in reversed(selected):
+                waypoint_listbox.delete(idx)
+            update_available_waypoints()
+            update_path_preview()
+
+        def move_up():
+            selected = list(waypoint_listbox.curselection())
+            for idx in selected:
+                if idx == 0:
+                    continue
+                value = waypoint_listbox.get(idx)
+                waypoint_listbox.delete(idx)
+                waypoint_listbox.insert(idx-1, value)
+                waypoint_listbox.selection_set(idx-1)
+            update_available_waypoints()
+            update_path_preview()
+
+        def move_down():
+            selected = list(waypoint_listbox.curselection())
+            for idx in reversed(selected):
+                if idx == waypoint_listbox.size() - 1:
+                    continue
+                value = waypoint_listbox.get(idx)
+                waypoint_listbox.delete(idx)
+                waypoint_listbox.insert(idx+1, value)
+                waypoint_listbox.selection_set(idx+1)
+            update_available_waypoints()
+            update_path_preview()
+
+        # Initial preview
+        update_path_preview()
+
+    def PopupDelete(self, x, y, event):
+        del_win = tk.Toplevel()
+        del_win.geometry(f"+{int(x)+40}+{int(y)+40}")
+        del_win.wm_overrideredirect(True)
+        ttk.Label(del_win, text="Delete:").grid(row=0, column=0, columnspan=2, sticky="nsew", pady=(0, 5))
+        ttk.Button(del_win, text="Delete Node", command=lambda: [self.DeleteNode_(event), del_win.destroy()]).grid(row=1, column=0, sticky="nsew")
+        ttk.Button(del_win, text="Delete Segment", command=lambda: [self.DeleteSegment_(event), del_win.destroy()]).grid(row=1, column=1, sticky="nsew")
+        ttk.Button(del_win, text="Cancel", command=del_win.destroy).grid(row=2, column=0, columnspan=2, sticky="nsew", pady=(5, 0))
+
+#Version 4 ideas: Añadir 3 stage switch con el que se muestre el code, name o code y name, encima de cada punto
+
+# At the end, launch the app as before
+root = tk.Tk()
+app = GraphVisualizer(root)
+root.mainloop()
