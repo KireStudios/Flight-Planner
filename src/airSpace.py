@@ -8,7 +8,8 @@ class AirSpace:
         self.pts = nav_points if nav_points is not None else []  # List of NavPoint objects
         self.seg = nav_segments if nav_segments is not None else []  # List of NavSegment objects
         self.aip = nav_airports if nav_airports is not None else []  # List of NavAirport objects
-
+        self.show_pts = True
+        self.show_seg = True
     # Read and fill the airspace with the data from the files
     def read_airspace(self, nav_file, seg_file, airport_file):
         self.read_nav_points(nav_file)
@@ -85,18 +86,20 @@ class AirSpace:
                     
     def Plot(self, ax):
         scale_factor = (((ax.get_xlim()[1] - ax.get_xlim()[0])**2 + (ax.get_ylim()[1] - ax.get_ylim()[0])**2)**0.5) / 100
-        for pt in self.pts:
-            ax.plot(pt.lon, pt.lat, 'ob', markersize=scale_factor*200)
-            ax.text(pt.lon, pt.lat + scale_factor, pt.name, fontsize=scale_factor*400, ha='center', va='bottom')
-        for seg in self.seg:
-            # Buscar los puntos correspondientes a seg.org y seg.des
-            pt1 = next((pt for pt in self.pts if pt.number == seg.org), None)
-            pt2 = next((pt for pt in self.pts if pt.number == seg.des), None)
-            if pt1 and pt2:
-                ax.plot([pt1.lon, pt2.lon], [pt1.lat, pt2.lat], 'r-', linewidth=scale_factor*30)
-                # Agregar una flecha en dirección del punto final
-                ax.annotate('', xy=(pt2.lon, pt2.lat), xytext=(pt1.lon, pt1.lat),
-                            arrowprops=dict(facecolor='red', edgecolor='red', arrowstyle='->', lw=scale_factor*30))
+        if self.show_pts:
+            for pt in self.pts:
+                ax.plot(pt.lon, pt.lat, 'ob', markersize=scale_factor*200)
+                ax.text(pt.lon, pt.lat + scale_factor, pt.name, fontsize=scale_factor*400, ha='center', va='bottom')
+        if self.show_seg:
+            for seg in self.seg:
+                # Buscar los puntos correspondientes a seg.org y seg.des
+                pt1 = next((pt for pt in self.pts if pt.number == seg.org), None)
+                pt2 = next((pt for pt in self.pts if pt.number == seg.des), None)
+                if pt1 and pt2:
+                    ax.plot([pt1.lon, pt2.lon], [pt1.lat, pt2.lat], 'r-', linewidth=scale_factor*30)
+                    # Agregar una flecha en dirección del punto final
+                    ax.annotate('', xy=(pt2.lon, pt2.lat), xytext=(pt1.lon, pt1.lat),
+                                arrowprops=dict(facecolor='red', edgecolor='red', arrowstyle='->', lw=scale_factor*30))
         for air in self.aip:
             for pts in self.pts:
                 if pts.name == air.SIDs[0]:
@@ -359,3 +362,26 @@ class AirSpace:
                     file.write(f"{star}\n")
         print(f"El grafo se ha guardado correctamente en {filenames[0]}, {filenames[1]} y {filenames[2]}.")
         return
+    def HidePts(self, ax=None):
+        self.show_pts = False
+        if ax is not None:
+            ax.clear()
+        self.Plot(ax)
+
+    def ShowPts(self, ax=None):
+        self.show_pts = True
+        if ax is not None:
+            ax.clear()
+        self.Plot(ax)
+
+    def HideSeg(self, ax=None):
+        self.show_seg = False
+        if ax is not None:
+            ax.clear()
+        self.Plot(ax)
+
+    def ShowSeg(self, ax=None):
+        self.show_seg = True
+        if ax is not None:
+            ax.clear()
+        self.Plot(ax)

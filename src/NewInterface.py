@@ -7,6 +7,7 @@ from navPoint import *
 from navSegment import *
 from navAirport import *
 import os
+import pygame
 
 def pulsate_warning(widget, iterations=4, pulse_speed=25):
     style = widget.cget('style') or 'Header.TLabel'
@@ -67,6 +68,11 @@ class GraphVisualizer:
         style.configure('TLabel', font=('Segoe UI', 12))
         style.configure('Header.TLabel', font=('Segoe UI', 18, 'bold'))
 
+        pygame.mixer.init()
+        pygame.mixer.music.load("White_Palace.mp3")
+        pygame.mixer.music.set_volume(0.4)
+        pygame.mixer.music.play(-1) 
+
         self.create_layout()
 
     def create_layout(self):
@@ -93,6 +99,9 @@ class GraphVisualizer:
         # Route planner tab (created when needed)
         self.route_frame = None
 
+        # Settings tab (created when needed)
+        self.settings_frame = None
+
         self.initial_widgets()
 
     def initial_widgets(self):
@@ -102,12 +111,13 @@ class GraphVisualizer:
         ttk.Button(self.left_frame, text="File...", command=self.PopupFile).pack(pady=10, fill="x")
         self.save_btn = ttk.Button(self.left_frame, text="Save Graph", command=self.GraphSaveDirect)
         self.export_btn = ttk.Button(self.left_frame, text="Export to Google Earth", command=self.export_to_google_earth)
+        
         # Do not pack save_btn, export_btn, or reset_btn yet
 
         # Right panel buttons
         ttk.Button(self.right_frame, text="Exit", command=self.root.quit).pack(pady=10, fill="x")
         self.reset_btn = ttk.Button(self.right_frame, text="Reset Graph", command=self.reset_graph)
-
+        ttk.Button(self.right_frame, text="Settings", command = self.open_settings).pack(pady=10, fill="x")
         # Info panel: create but do not pack yet
         self.info_panel = ttk.Frame(self.right_frame, padding=(10, 10), relief="groove", borderwidth=2)
         self.selector_frame = ttk.Frame(self.info_panel)
@@ -940,7 +950,100 @@ class GraphVisualizer:
         ttk.Button(del_win, text="Delete Segment", command=lambda: [self.DeleteSegment_(event), del_win.destroy()]).grid(row=1, column=1, sticky="nsew")
         ttk.Button(del_win, text="Cancel", command=del_win.destroy).grid(row=2, column=0, columnspan=2, sticky="nsew", pady=(5, 0))
 
+    def open_settings(self):
+        # Helper to close the settings tab and clear reference
+        def close_settings_tab():
+            if self.settings_frame and self.settings_frame.winfo_exists():
+                self.notebook.forget(self.settings_frame)
+            self.settings_frame = None
+
+        # If already open, close it before opening a new one
+        close_settings_tab()
+        
+        self.settings_frame = ttk.Frame(self.notebook, padding=(10, 10))
+        self.notebook.add(self.settings_frame, text="Settings")
+        self.notebook.select(self.settings_frame)
+        ttk.Label(self.settings_frame, text="SETTINGS\n", font=('Segoe UI', 12, 'bold')).pack(anchor="w")
+        # The music
+        ttk.Label(self.settings_frame, text="Music", font=('Segoe UI', 12)).pack(anchor="w")
+        #Frame de la música
+        music_frame = ttk.Frame(self.settings_frame)
+        music_frame.pack(fill="x", pady=(0, 10))
+        # Frame interno para centrar los botones
+        music_inner_frame = ttk.Frame(music_frame)
+        music_inner_frame.pack(anchor="center") 
+        self.music_inner_frame = music_inner_frame
+
+        ttk.Button(music_inner_frame, text="Start music", command=lambda: pygame.mixer.music.play(-1)).pack(side="left", padx=(0, 5))
+        ttk.Button(music_inner_frame, text="Stop music", command=pygame.mixer.music.stop).pack(side="left", padx=(0, 5))
+        ttk.Button(music_inner_frame, text="Volume", command=lambda: self.MusicVolume()).pack(side="left", padx=(0, 5))
+        ttk.Button(music_inner_frame, text="Pause music", command=pygame.mixer.music.pause).pack(side="left", padx=(0, 5))
+        ttk.Button(music_inner_frame, text="Unpause music", command=pygame.mixer.music.unpause).pack(side="left", padx=(0, 5))
+        #Slider de volumen
+        self.volume_slider_frame = ttk.Frame(music_frame)
+        self.volume_slider_frame.pack(fill="x", pady=(10, 0))
+
+        #Color de fondo
+        ttk.Label(self.settings_frame, text="Background Color", font=('Segoe UI', 12)).pack(anchor="w")
+        #Frame de color
+        color_frame = ttk.Frame(self.settings_frame)
+        color_frame.pack(fill="x", pady=(0, 10))
+        #Frame interno para centrar los botones
+        color_inner_frame = ttk.Frame(color_frame)
+        color_inner_frame.pack(anchor="center")
+        self.color_inner_frame = color_inner_frame
+        
+        # Lista de colores
+        color_options = ["White", "Red", "Green", "Blue", "Orange", "Yellow", "Pink", "Cyan", "Magenta"]
+        self.selected_color = tk.StringVar(value=color_options[0])
+
+        # Combobox para seleccionar color
+        color_combobox = ttk.Combobox(color_inner_frame,textvariable=self.selected_color,values=color_options,state="readonly",width=10)
+        color_combobox.pack(fill='x',side="left", padx=(0, 5))
+
+        # Botón para aplicar el color seleccionado
+        ttk.Button(color_inner_frame,text="Apply",command=lambda: self.change_background_color(self.selected_color.get().lower())).pack(side="left", padx=(0, 5))
+        
+        # Botones para quitar nodos y segmentos
+        if self.graph_loaded:
+            ttk.Label(self.settings_frame, text="Graph Options", font=('Segoe UI', 12)).pack(anchor="w")
+            #Frame de opciones
+            options_frame = ttk.Frame(self.settings_frame)
+            options_frame.pack(fill="x", pady=(0, 10))
+            #Frame interno para centrar los botones
+            options_inner_frame = ttk.Frame(options_frame)
+            options_inner_frame.pack(anchor="center")
+            self.options_inner_frame = options_inner_frame
+            #Botones de opciones
+            ttk.Button(options_inner_frame, text="Hide Nodes", command=lambda: [self.graph.HidePts(self.ax1), self.canvas.draw()]).pack(side="left", padx=(0, 5))
+            ttk.Button(options_inner_frame, text="Show Nodes", command=lambda: [self.graph.ShowPts(self.ax1), self.canvas.draw()]).pack(side="left", padx=(0, 5))
+            ttk.Button(options_inner_frame, text="Hide Segments", command=lambda: [self.graph.HideSeg(self.ax1), self.canvas.draw()]).pack(side="left", padx=(0, 5))
+            ttk.Button(options_inner_frame, text="Show Segments", command=lambda: [self.graph.ShowSeg(self.ax1), self.canvas.draw()]).pack(side="left", padx=(0, 5))
+
+        #Botón para cerrar la ventana de settings
+        ttk.Button(self.settings_frame, text="Close", command=close_settings_tab).pack(pady=(0, 10))
+    ##Funciones del settings
+        #Función para el volumen
+    def MusicVolume(self):
+            set_volume = lambda val: pygame.mixer.music.set_volume(float(val) / 100)
+            music_volume = tk.DoubleVar(value=pygame.mixer.music.get_volume() * 100)
+            volume_slider = ttk.Scale(self.volume_slider_frame, from_=0, to=100, orient='horizontal', variable=music_volume, command=set_volume)
+            volume_slider.pack(pady=10, padx=10)
+            volume_slider.config(length=150)
+        #Función para cambiar el color de fondo
+    def change_background_color(self, color):
+    # Cambiar el color de fondo de la figura matplotlib
+            self.canvas.figure.set_facecolor(color)
+            self.canvas.draw_idle()
+    #Función para cerrar todo
+    def on_exit(self):
+        if pygame.mixer.get_init():
+            pygame.mixer.music.stop()
+        self.root.quit()
+
 #Version 4 ideas: Añadir 3 stage switch con el que se muestre el code, name o code y name, encima de cada punto
+#                        Añadir un botón para enseñar o ocultar nodos y segmentos
+#                        Posibilidad de hacer zoom en una zona concreta
 
 # At the end, launch the app as before
 root = tk.Tk()
