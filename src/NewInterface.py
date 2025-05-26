@@ -7,6 +7,7 @@ from navPoint import *
 from navSegment import *
 from navAirport import *
 import os
+import webbrowser
 import pygame
 
 def pulsate_warning(widget, iterations=4, pulse_speed=25):
@@ -240,7 +241,7 @@ class GraphVisualizer:
 
         # Métodos para las acciones
     def GraphLoad(self):
-        carpeta = filedialog.askdirectory(title="Selecciona la carpeta con los archivos .txt")
+        carpeta = filedialog.askdirectory(title="Selecciona la carpeta con los archivos .txt", initialdir="data/AirSpaces")
         if not carpeta:
             print("No se ha seleccionado ninguna carpeta.")
         self.nav_points_file = None
@@ -553,16 +554,28 @@ class GraphVisualizer:
                     self.node_selector.after(1, lambda: self.node_selector.event_generate('<Button-1>'))  # Reopen
 
     def update_node_selector_values(self):
-        # Only restore full list if search bar is empty
+        # Include both points and airports in the selector
         typed = self.node_selector_var.get().strip().lower()
+        values = [f"{p.name} (#{p.number})" for p in self.graph.pts]
+        # Add airports
+        if hasattr(self.graph, "airports"):
+            values += [f"{a.name} [AP]" for a in self.graph.airports]
         if not typed:
-            values = [f"{p.name} (#{p.number})" for p in self.graph.pts]
             self.node_selector['values'] = values
-        # Otherwise, do nothing (keep filtered list)
+        else:
+            filtered = [v for v in values if typed in v.lower()]
+            self.node_selector['values'] = filtered
 
     def show_node_info_from_selector(self, selected):
-        # Extract the code from the string (assuming format "name (#code)")
-        if "(" in selected and "#" in selected:
+        # Check if it's an airport
+        if "[AP]" in selected:
+            name = selected.split(" [AP]")[0]
+            for a in getattr(self.graph, "airports", []):
+                if a.name == name:
+                    self.selected_point = a
+                    self.update_info_panel(a)
+                    break
+        elif "(" in selected and "#" in selected:
             try:
                 code = int(selected.split("#")[-1].split(")")[0])
                 for point in self.graph.pts:
@@ -649,7 +662,102 @@ class GraphVisualizer:
             self.canvas.draw()
 
     def export_to_google_earth(self):
-        messagebox.showinfo("Exported", f"Graph exported to google earth.\n Pd: Joking, work in progress...")
+        from tkinter import filedialog
+
+        # Fast export without asking with later option to save it
+        kml_path = "data/KMLs/fast_export/flight_planner_export.kml"
+
+        def kml_coords(lat, lon):
+            # KML uses lon,lat[,alt]
+            return f"{lon},{lat},0"
+
+        kml = [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<kml xmlns="http://www.opengis.net/kml/2.2">',
+            '<Document>',
+            '<name>Flight Planner Export</name>',
+            # Styles
+            '<Style id="nodeStyle"><IconStyle><color>ff0000ff</color><scale>1.1</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon></IconStyle></Style>',
+            '<Style id="segmentStyle"><LineStyle><color>ff00ffff</color><width>3</width></LineStyle></Style>',
+            '<Style id="airportStyle"><IconStyle><color>ff00ff00</color><scale>1.3</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/airports.png</href></Icon></IconStyle></Style>',
+        ]
+
+        # Export NavPoints (nodes)
+        if self.graph.show_pts:
+            for p in self.graph.pts:
+                kml.append(f'''
+<Placemark>
+    <name>{p.name} (#{p.number})</name>
+    <styleUrl>#nodeStyle</styleUrl>
+    <Point>
+        <coordinates>{kml_coords(p.lat, p.lon)}</coordinates>
+    </Point>
+</Placemark>
+''')
+
+        # Export Airports
+        if self.graph.show_airports:
+            for a in self.graph.aip:
+                # Airports are treated as special NavPoints, and as not knowing their position we use the one of their first SID
+                b = a.SIDs[0]
+                kml.append(f'''
+<Placemark>
+    <name>{a.name} [Airport]</name>
+    <styleUrl>#airportStyle</styleUrl>
+    <Point>
+        <coordinates>{kml_coords(b.lat, b.lon)}</coordinates>
+    </Point>
+</Placemark>
+''')
+
+        # Export Segments (edges)
+        if self.graph.show_seg:
+            for s in self.graph.seg:
+                # Find origin and destination points
+                org = next((p for p in self.graph.pts if p.number == s.org), None)
+                des = next((p for p in self.graph.pts if p.number == s.des), None)
+                if org and des:
+                    kml.append(f'''
+<Placemark>
+    <name>{org.name} → {des.name}</name>
+    <styleUrl>#segmentStyle</styleUrl>
+    <LineString>
+        <coordinates>
+            {kml_coords(org.lat, org.lon)}
+            {kml_coords(des.lat, des.lon)}
+        </coordinates>
+    </LineString>
+</Placemark>
+''')
+
+        kml.append('</Document></kml>')
+
+        try:
+            with open(kml_path, "w", encoding="utf-8") as f:
+                f.write('\n'.join(kml))
+            webbrowser.open(f'file://{os.path.abspath(kml_path)}')
+
+            # message box with button to save the KML file
+            kml_path = None
+            save_kml = messagebox.askyesno("Exported", "Graph exported to Google Earth.\nDo you want to save the KML file?")
+            if save_kml:
+                # Ask user where to save the KML file in KMLs by default
+                kml_path = filedialog.asksaveasfilename(
+                    title="Save KML File",
+                    defaultextension=".kml",
+                    filetypes=[("KML Files", "*.kml")],
+                    initialdir="data/KMLs/",
+                ) 
+            if not kml_path:
+                #delete the fast export file if it exists
+                if os.path.exists("data/KMLs/fast_export/flight_planner_export.kml"):
+                    os.remove("data/KMLs/fast_export/flight_planner_export.kml")
+            else:
+                with open(kml_path, "w", encoding="utf-8") as f:
+                        f.write('\n'.join(kml))    
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to export KML:\n{e}")
 
     def open_route_planner(self, origin_point):
         # Helper to close the route planner tab and clear reference
@@ -669,12 +777,15 @@ class GraphVisualizer:
 
         # Get all reachable nodes from the origin (excluding the origin itself)
         reachable_points = self.graph.Reachability(origin_point.name)
-        reachable_points = [p for p in reachable_points if p.number != origin_point.number]
+        reachable_points = [p for p in reachable_points if p.number != getattr(origin_point, "number", None)]
+        # Add airports as possible destinations
+        all_dest_values = [f"{p.name} (#{p.number})" for p in reachable_points]
+        if hasattr(self.graph, "airports"):
+            all_dest_values += [f"{a.name} [AP]" for a in self.graph.airports if a.name != origin_point.name]
 
         # Destination selector
         ttk.Label(self.route_frame, text="Destination:").pack(anchor="w")
         dest_var = tk.StringVar()
-        all_dest_values = [f"{p.name} (#{p.number})" for p in reachable_points]
         dest_combo = ttk.Combobox(self.route_frame, textvariable=dest_var, values=all_dest_values, state="normal")
         dest_combo.pack(fill="x", pady=(0, 10))
 
@@ -705,6 +816,9 @@ class GraphVisualizer:
 
         # --- Helper to get NavPoint from string ---
         def get_point_from_str(s):
+            if "[AP]" in s:
+                name = s.split(" [AP]")[0]
+                return next((a for a in getattr(self.graph, "airports", []) if a.name == name), None)
             code = int(s.split("#")[-1].split(")")[0])
             return next((p for p in self.graph.pts if p.number == code), None)
 
@@ -816,24 +930,37 @@ class GraphVisualizer:
                 if wp_point and wp_point != origin_point and wp_point != dest_point:
                     waypoints.append(wp_point)
 
-            # Build full route: origin -> waypoints... -> destination
+            # --- SID/STAR logic ---
             route_points = [origin_point] + waypoints + [dest_point]
             full_path = []
+
+            # If origin is airport, add SID
+            if hasattr(origin_point, "get_sid_path"):
+                sid_path = origin_point.get_sid_path()  # Implement this method in your airport class
+                if sid_path:
+                    full_path.extend(sid_path)
+
+            # Main route segments
             for i in range(len(route_points) - 1):
                 segment = self.graph.FindShortestPath(route_points[i].name, route_points[i+1].name)
                 if not segment:
                     messagebox.showerror("Error", f"No path between {route_points[i].name} and {route_points[i+1].name}.")
                     return
-                if i > 0:
+                if i > 0 or full_path:  # Avoid duplicate nodes
                     segment = segment[1:]
                 full_path.extend(segment)
+
+            # If destination is airport, add STAR
+            if hasattr(dest_point, "get_star_path"):
+                star_path = dest_point.get_star_path()  # Implement this method in your airport class
+                if star_path:
+                    full_path.extend(star_path)
 
             # Plot the route on the main graph tab
             self.notebook.select(self.center_frame)
             self.clear_graph()
             self.graph.PlotPath(self.ax1, full_path)
             self.canvas.draw()
-            # messagebox.showinfo("Route", f"Route from '{origin_point.name}' to '{dest_point.name}' calculated and shown.")
 
         ttk.Button(self.route_frame, text="Calculate Route", command=calculate_route).pack(pady=10)
         ttk.Button(self.route_frame, text="Close", command=close_route_tab).pack()
