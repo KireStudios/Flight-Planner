@@ -61,12 +61,32 @@ class GraphVisualizer:
         self.route_origin = None
         self.route_selecting = False
 
-        # Set ttk theme
-        style = ttk.Style(self.root)
-        style.theme_use('clam')
-        style.configure('TButton', font=('Segoe UI', 11), padding=8)
-        style.configure('TLabel', font=('Segoe UI', 12))
-        style.configure('Header.TLabel', font=('Segoe UI', 18, 'bold'))
+        # Set ttk theme and theme palette
+        self.style = ttk.Style(self.root)
+        self.style.theme_use('clam')
+        self.theme_palette = {
+            "default": "#DDDDDD",
+            "light": "#F8F8F8",
+            "dark": "#222831",
+            "sunny day": "#F6EAC2",
+            "marine blue": "#3A506B",
+            "rose mist": "#D7A7C1",
+            "mint green": "#A7C7A3",
+            "sunset orange": "#E6B07A",
+            "lemon cream": "#F3E9B0",
+            "purple dream": "#B07AD7"
+        }
+        self.theme_names = [
+            "Default", "Light", "Dark", "Sunny Day", "Marine Blue", "Rose Mist", "Mint Green", "Sunset Orange", "Lemon Cream", "Purple Dream"
+        ]
+        self.selected_theme = tk.StringVar(value=self.theme_names[0])
+
+        # Configure styles for all widgets
+        self.style.configure('TButton', font=('Segoe UI', 11), padding=8)
+        self.style.configure('TLabel', font=('Segoe UI', 12))
+        self.style.configure('Header.TLabel', font=('Segoe UI', 18, 'bold'))
+        self.style.configure('Custom.TFrame', background="#DDDDDD")
+        self.style.configure('Custom.TLabel', background="#DDDDDD")
 
         pygame.mixer.init()
         pygame.mixer.music.load("White_Palace.mp3")
@@ -74,26 +94,28 @@ class GraphVisualizer:
         pygame.mixer.music.play(-1) 
 
         self.create_layout()
+        # --- Apply default theme at startup ---
+        self.apply_theme("Default")
 
     def create_layout(self):
         """ Create the main interface structure with modern look """
         # Top header
-        self.header_frame = ttk.Frame(self.root, padding=(10, 10))
+        self.header_frame = ttk.Frame(self.root, padding=(10, 10), style="Custom.TFrame")
         self.header_frame.pack(side="top", fill="x")
         ttk.Label(self.header_frame, text="Flight Planner", style='Header.TLabel').pack(side="left")
 
         # Main content frames
-        self.left_frame = ttk.Frame(self.root, padding=(10, 10))
+        self.left_frame = ttk.Frame(self.root, padding=(10, 10), style="Custom.TFrame")
         self.left_frame.pack(side="left", fill="y")
 
-        self.right_frame = ttk.Frame(self.root, padding=(10, 10))
+        self.right_frame = ttk.Frame(self.root, padding=(10, 10), style="Custom.TFrame")
         self.right_frame.pack(side="right", fill="y")
 
         # Center panel: use a Notebook for tabs
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(side="left", expand=True, fill="both")
 
-        self.center_frame = ttk.Frame(self.notebook, padding=(10, 10))
+        self.center_frame = ttk.Frame(self.notebook, padding=(10, 10), style="Custom.TFrame")
         self.notebook.add(self.center_frame, text="Graph")
 
         # Route planner tab (created when needed)
@@ -847,12 +869,10 @@ class GraphVisualizer:
                         user_waypoints.append(wp_point)
                 # Build full route: origin -> waypoints... -> destination
                 route_points = [origin_point] + user_waypoints + [dest_point]
-                full_path = []
+                full_path = [origin_point.name]
                 bold_indices = set()
                 total_cost = 0
                 path_index = 0
-                # Indices in route_points of user waypoints
-                user_wp_indices = [i+1 for i in range(len(user_waypoints))]
                 # For bold: always mark 0 (origin), user waypoints at their segment start, and last (destination)
                 for i in range(len(route_points) - 1):
                     segment = self.graph.FindShortestPath(route_points[i].name, route_points[i+1].name)
@@ -867,7 +887,7 @@ class GraphVisualizer:
                     if i > 0:
                         segment = segment[1:]
                         # For bold: mark the first node of each segment
-                        bold_indices.add(path_index-1)
+                        bold_indices.add(path_index)
                     for j, p in enumerate(segment):
                         full_path.append(p.name)                            
                         path_index += 1
@@ -951,25 +971,20 @@ class GraphVisualizer:
         ttk.Button(del_win, text="Cancel", command=del_win.destroy).grid(row=2, column=0, columnspan=2, sticky="nsew", pady=(5, 0))
 
     def open_settings(self):
-        # Helper to close the settings tab and clear reference
         def close_settings_tab():
             if self.settings_frame and self.settings_frame.winfo_exists():
                 self.notebook.forget(self.settings_frame)
             self.settings_frame = None
 
-        # If already open, close it before opening a new one
         close_settings_tab()
         
         self.settings_frame = ttk.Frame(self.notebook, padding=(10, 10))
         self.notebook.add(self.settings_frame, text="Settings")
         self.notebook.select(self.settings_frame)
         ttk.Label(self.settings_frame, text="SETTINGS\n", font=('Segoe UI', 12, 'bold')).pack(anchor="w")
-        # The music
         ttk.Label(self.settings_frame, text="Music", font=('Segoe UI', 12)).pack(anchor="w")
-        #Frame de la música
         music_frame = ttk.Frame(self.settings_frame)
         music_frame.pack(fill="x", pady=(0, 10))
-        # Frame interno para centrar los botones
         music_inner_frame = ttk.Frame(music_frame)
         music_inner_frame.pack(anchor="center") 
         self.music_inner_frame = music_inner_frame
@@ -979,62 +994,84 @@ class GraphVisualizer:
         ttk.Button(music_inner_frame, text="Volume", command=lambda: self.MusicVolume()).pack(side="left", padx=(0, 5))
         ttk.Button(music_inner_frame, text="Pause music", command=pygame.mixer.music.pause).pack(side="left", padx=(0, 5))
         ttk.Button(music_inner_frame, text="Unpause music", command=pygame.mixer.music.unpause).pack(side="left", padx=(0, 5))
-        #Slider de volumen
         self.volume_slider_frame = ttk.Frame(music_frame)
         self.volume_slider_frame.pack(fill="x", pady=(10, 0))
 
-        #Color de fondo
-        ttk.Label(self.settings_frame, text="Background Color", font=('Segoe UI', 12)).pack(anchor="w")
-        #Frame de color
-        color_frame = ttk.Frame(self.settings_frame)
-        color_frame.pack(fill="x", pady=(0, 10))
-        #Frame interno para centrar los botones
-        color_inner_frame = ttk.Frame(color_frame)
-        color_inner_frame.pack(anchor="center")
-        self.color_inner_frame = color_inner_frame
-        
-        # Lista de colores
-        color_options = ["White", "Red", "Green", "Blue", "Orange", "Yellow", "Pink", "Cyan", "Magenta"]
-        self.selected_color = tk.StringVar(value=color_options[0])
+        # Theme selection
+        ttk.Label(self.settings_frame, text="Theme", font=('Segoe UI', 12)).pack(anchor="w")
+        theme_frame = ttk.Frame(self.settings_frame)
+        theme_frame.pack(fill="x", pady=(0, 10))
+        theme_inner_frame = ttk.Frame(theme_frame)
+        theme_inner_frame.pack(anchor="center")
+        self.theme_inner_frame = theme_inner_frame
 
-        # Combobox para seleccionar color
-        color_combobox = ttk.Combobox(color_inner_frame,textvariable=self.selected_color,values=color_options,state="readonly",width=10)
-        color_combobox.pack(fill='x',side="left", padx=(0, 5))
+        # Theme selection combobox (ensure it also gets themed)
+        self.theme_combobox = ttk.Combobox(
+            theme_inner_frame,
+            textvariable=self.selected_theme,
+            values=self.theme_names,
+            state="readonly",
+            width=15
+        )
+        self.theme_combobox.pack(fill='x', side="left", padx=(0, 5))
+        self.theme_combobox.bind("<<ComboboxSelected>>", lambda e: self.apply_theme(self.selected_theme.get()))
 
-        # Botón para aplicar el color seleccionado
-        ttk.Button(color_inner_frame,text="Apply",command=lambda: self.change_background_color(self.selected_color.get().lower())).pack(side="left", padx=(0, 5))
-        
-        # Botones para quitar nodos y segmentos
+        '''ttk.Button(
+            theme_inner_frame,
+            text="Apply",
+            command=lambda: self.apply_theme(self.selected_theme.get())
+        ).pack(side="left", padx=(0, 5))'''
+
         if self.graph_loaded:
             ttk.Label(self.settings_frame, text="Graph Options", font=('Segoe UI', 12)).pack(anchor="w")
-            #Frame de opciones
             options_frame = ttk.Frame(self.settings_frame)
             options_frame.pack(fill="x", pady=(0, 10))
-            #Frame interno para centrar los botones
             options_inner_frame = ttk.Frame(options_frame)
             options_inner_frame.pack(anchor="center")
             self.options_inner_frame = options_inner_frame
-            #Botones de opciones
-            ttk.Button(options_inner_frame, text="Hide Nodes", command=lambda: [self.graph.HidePts(self.ax1), self.canvas.draw()]).pack(side="left", padx=(0, 5))
-            ttk.Button(options_inner_frame, text="Show Nodes", command=lambda: [self.graph.ShowPts(self.ax1), self.canvas.draw()]).pack(side="left", padx=(0, 5))
-            ttk.Button(options_inner_frame, text="Hide Segments", command=lambda: [self.graph.HideSeg(self.ax1), self.canvas.draw()]).pack(side="left", padx=(0, 5))
-            ttk.Button(options_inner_frame, text="Show Segments", command=lambda: [self.graph.ShowSeg(self.ax1), self.canvas.draw()]).pack(side="left", padx=(0, 5))
+            ttk.Button(options_inner_frame, text="Hide Nodes", command=lambda: [self.graph.ShowPts(self.ax1, False), self.canvas.draw()]).pack(side="left", padx=(0, 5))
+            ttk.Button(options_inner_frame, text="Show Nodes", command=lambda: [self.graph.ShowPts(self.ax1, True), self.canvas.draw()]).pack(side="left", padx=(0, 5))
+            ttk.Button(options_inner_frame, text="Hide Segments", command=lambda: [self.graph.ShowSeg(self.ax1, False), self.canvas.draw()]).pack(side="left", padx=(0, 5))
+            ttk.Button(options_inner_frame, text="Show Segments", command=lambda: [self.graph.ShowSeg(self.ax1, True), self.canvas.draw()]).pack(side="left", padx=(0, 5))
+            ttk.Checkbutton(options_inner_frame, text="Show Names", variable=self.graph.show_names, command=lambda: [self.graph.ToggleNames(self.ax1, self.graph.show_names.get()), self.canvas.draw()]).pack(side="left", padx=(0, 5))
 
-        #Botón para cerrar la ventana de settings
         ttk.Button(self.settings_frame, text="Close", command=close_settings_tab).pack(pady=(0, 10))
-    ##Funciones del settings
-        #Función para el volumen
-    def MusicVolume(self):
-            set_volume = lambda val: pygame.mixer.music.set_volume(float(val) / 100)
-            music_volume = tk.DoubleVar(value=pygame.mixer.music.get_volume() * 100)
-            volume_slider = ttk.Scale(self.volume_slider_frame, from_=0, to=100, orient='horizontal', variable=music_volume, command=set_volume)
-            volume_slider.pack(pady=10, padx=10)
-            volume_slider.config(length=150)
-        #Función para cambiar el color de fondo
-    def change_background_color(self, color):
-    # Cambiar el color de fondo de la figura matplotlib
-            self.canvas.figure.set_facecolor(color)
-            self.canvas.draw_idle()
+
+    def apply_theme(self, theme_name):
+        color = self.theme_palette.get(theme_name.lower(), "#DDDDDD")
+        theme_key = theme_name.lower().replace(" ", "_")
+
+        # Update ttk styles for all relevant widgets
+        self.style.configure('TFrame', background=color)
+        self.style.configure('TLabel', background=color)
+        self.style.configure('Header.TLabel', background=color)
+        self.style.configure('Custom.TFrame', background=color)
+        self.style.configure('Custom.TLabel', background=color)
+        self.style.configure('TButton', background=color)
+        self.style.configure('TCombobox', fieldbackground=color, background=color)
+        self.style.configure('TCheckbutton', background=color)
+        self.style.map('TButton', background=[('active', color), ('!active', color)])
+
+        self.style.configure('TNotebook', background=color, borderwidth=0)
+        self.style.configure('TNotebook.Tab', background=color, lightcolor=color, borderwidth=0)
+        self.style.map('TNotebook.Tab', background=[('selected', color), ('!selected', color)])
+
+        self.style.configure('TCombobox', selectbackground=color, selectforeground="#222" if theme_key in ["default", "light", "sunny_day", "lemon_cream", "rose_mist"] else "#fff")
+
+        fg = "#222" if theme_key in ["default", "light", "sunny_day", "lemon_cream", "rose_mist"] else "#fff"
+        self.style.configure('TLabel', foreground=fg)
+        self.style.configure('Header.TLabel', foreground=fg)
+        self.style.configure('TButton', foreground=fg)
+        self.style.configure('TCombobox', foreground=fg)
+        self.style.configure('TNotebook.Tab', foreground=fg)
+
+        self.root.configure(bg=color)
+        self.canvas.figure.set_facecolor(color)
+        for ax in self.canvas.figure.axes:
+            for line in ax.get_lines():
+                line.set_color(fg)
+        self.canvas.draw_idle()
+
     #Función para cerrar todo
     def on_exit(self):
         if pygame.mixer.get_init():

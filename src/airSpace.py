@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 from navPoint import NavPoint
 from navSegment import NavSegment
 from navAirport import NavAirport
+import tkinter as tk
 
 class AirSpace:
     def __init__(self, nav_points=None, nav_segments=None, nav_airports=None):
@@ -10,6 +11,8 @@ class AirSpace:
         self.aip = nav_airports if nav_airports is not None else []  # List of NavAirport objects
         self.show_pts = True
         self.show_seg = True
+        self.show_airports = True
+        self.show_names = tk.BooleanVar(value=True)
     # Read and fill the airspace with the data from the files
     def read_airspace(self, nav_file, seg_file, airport_file):
         self.read_nav_points(nav_file)
@@ -89,7 +92,8 @@ class AirSpace:
         if self.show_pts:
             for pt in self.pts:
                 ax.plot(pt.lon, pt.lat, 'ob', markersize=scale_factor*200)
-                ax.text(pt.lon, pt.lat + scale_factor, pt.name, fontsize=scale_factor*400, ha='center', va='bottom')
+                if self.show_names.get():
+                    ax.text(pt.lon, pt.lat + scale_factor, pt.name, fontsize=scale_factor*400, ha='center', va='bottom')
         if self.show_seg:
             for seg in self.seg:
                 # Buscar los puntos correspondientes a seg.org y seg.des
@@ -98,14 +102,24 @@ class AirSpace:
                 if pt1 and pt2:
                     ax.plot([pt1.lon, pt2.lon], [pt1.lat, pt2.lat], 'r-', linewidth=scale_factor*30)
                     # Agregar una flecha en dirección del punto final
-                    ax.annotate('', xy=(pt2.lon, pt2.lat), xytext=(pt1.lon, pt1.lat),
-                                arrowprops=dict(facecolor='red', edgecolor='red', arrowstyle='->', lw=scale_factor*30))
-        for air in self.aip:
-            for pts in self.pts:
-                if pts.name == air.SIDs[0]:
-                    ax.plot(pts.lon, pts.lat, 'og', markersize=scale_factor*200)
-                    ax.text(pts.lon, pts.lat + scale_factor, air.name, fontsize=scale_factor*400, ha='center', va='bottom')
-                    break
+                    ax.annotate('', xy=(pt2.lon, pt2.lat), xytext=(pt1.lon, pt1.lat), arrowprops=dict(facecolor='red', edgecolor='red', arrowstyle='->', lw=scale_factor*30))
+        if self.show_airports:
+            for air in self.aip:
+                for pts in self.pts:
+                    for pt in air.SIDs + air.STARs:
+                        if pts.name == pt.name and pt in air.SIDs:
+                            if pts.name == air.SIDs[0]:
+                                #We plot airport at first SID as we don't know the airport position
+                                ax.plot(pts.lon, pts.lat, 'oo', markersize=scale_factor*200)
+                                if self.show_names.get():
+                                    ax.text(pts.lon, pts.lat + scale_factor, air.name, fontsize=scale_factor*400, ha='center', va='bottom')
+                            ax.plot(pts.lon, pts.lat, 'og', markersize=scale_factor*200)
+                            if self.show_names.get():
+                                ax.text(pts.lon, pts.lat + scale_factor, air.name, fontsize=scale_factor*400, ha='center', va='bottom')
+                        elif pts.name == pt.name and pt in air.STARs:
+                            ax.plot(pts.lon, pts.lat, 'or', markersize=scale_factor*200)
+                            if self.show_names.get():
+                                ax.text(pts.lon, pts.lat + scale_factor, air.name, fontsize=scale_factor*400, ha='center', va='bottom')
 
         ax.set_xlabel('Longitude')
         ax.set_ylabel('Latitude')
@@ -362,26 +376,27 @@ class AirSpace:
                     file.write(f"{star}\n")
         print(f"El grafo se ha guardado correctamente en {filenames[0]}, {filenames[1]} y {filenames[2]}.")
         return
-    def HidePts(self, ax=None):
-        self.show_pts = False
+
+    def ShowPts(self, ax=None, val=True):
+        self.show_pts = val
         if ax is not None:
             ax.clear()
         self.Plot(ax)
 
-    def ShowPts(self, ax=None):
-        self.show_pts = True
+    def ShowSeg(self, ax=None, val=True):
+        self.show_seg = val
         if ax is not None:
             ax.clear()
         self.Plot(ax)
 
-    def HideSeg(self, ax=None):
-        self.show_seg = False
+    def ShowAirports(self, ax=None, val=True):
+        self.show_airports = val
         if ax is not None:
             ax.clear()
         self.Plot(ax)
 
-    def ShowSeg(self, ax=None):
-        self.show_seg = True
+    def ToggleNames(self, ax=None, val=True):
+        self.show_names.set(val)
         if ax is not None:
             ax.clear()
         self.Plot(ax)
