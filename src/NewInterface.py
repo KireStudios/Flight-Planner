@@ -44,8 +44,47 @@ def pulsate_warning(widget, iterations=4, pulse_speed=25):
             widget.after(pulse_speed, pulse_step)
     pulse_step()
 
+def show_animated_intro(root):
+        splash = tk.Toplevel()
+        splash.overrideredirect(True)
+        splash.wm_attributes("-topmost", True)
+        w, h = 400, 400
+        sw = splash.winfo_screenwidth()
+        sh = splash.winfo_screenheight()
+        x = (sw // 2)
+        y = (sh // 2)
+        splash.geometry(f"{w}x{h}+{x}+{y}")
+        splash.configure(bg="#3A506B")
+
+        canvas = tk.Canvas(splash, width=200, height=200, bg="#3A506B", highlightthickness=0)
+        canvas.place(relx=0.5, rely=0.5, anchor="center")
+
+        # Draw a spinning airplane emoji
+        airplane = canvas.create_text(100, 100, text="✈️", font=("Segoe UI Emoji", 64), fill="#F6EAC2", tags="plane")
+
+        # Title
+        label = tk.Label(splash, text="Flight Planner", font=("Segoe UI", 20, "bold"), fg="#F6EAC2", bg="#3A506B")
+        label.place(relx=0.5, rely=0.15, anchor="center")
+
+        # Simple animation: rotate emoji
+        angle = [0]
+        def animate():
+            angle[0] = (angle[0] + 15) % 360
+            canvas.delete("plane")
+            offset_x = 40 * (1 if (angle[0] // 90) % 2 == 0 else -1)
+            offset_y = 40 * (1 if (angle[0] // 180) == 0 else -1)
+            canvas.create_text(100 + offset_x, 100 + offset_y, text="✈️", font=("Segoe UI Emoji", 64), fill="#F6EAC2", tags="plane")
+            splash.after(10, animate)
+
+        root.withdraw()
+        splash.after(100, animate)
+        # Auto-close after 4 seconds in case animation is interrupted
+        splash.after(4000, lambda: (splash.destroy(), root.deiconify()))
+
 class GraphVisualizer:
     def __init__(self, root):
+        show_animated_intro(root)
+
         self.root = root
         self.root.title("Flight Planner")
         self.root.geometry("1280x720")
@@ -80,9 +119,7 @@ class GraphVisualizer:
             "lemon cream": "#F3E9B0",
             "purple dream": "#B07AD7"
         }
-        self.theme_names = [
-            "Default", "Light", "Dark", "Sunny Day", "Marine Blue", "Rose Mist", "Mint Green", "Sunset Orange", "Lemon Cream", "Purple Dream"
-        ]
+        self.theme_names = [ "Default", "Light", "Dark", "Sunny Day", "Marine Blue", "Rose Mist", "Mint Green", "Sunset Orange", "Lemon Cream", "Purple Dream" ]
         self.selected_theme = tk.StringVar(value=self.theme_names[0])
 
         # Configure styles for all widgets
