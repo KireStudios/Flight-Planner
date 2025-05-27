@@ -56,12 +56,13 @@ class GraphVisualizer:
         self.popup_win = None
         self.tquocient = 100
         self.load = False
+        self.graph_title = "Graph Visualization"
         self.cycle_count = 0
         self.selected_point = None
         self.info_widgets = {}
         self.route_origin = None
         self.route_selecting = False
-        self.current_route_path = None  # <-- Add this line
+        self.current_route_path = None
 
         # Set ttk theme and theme palette
         self.style = ttk.Style(self.root)
@@ -99,6 +100,9 @@ class GraphVisualizer:
         # --- Apply default theme at startup ---
         self.apply_theme("Default")
 
+        # --- Autoload CAT airspace at startup ---
+        self.quick_load_airspace("CAT")
+
     def create_layout(self):
         """ Create the main interface structure with modern look """
         # Top header
@@ -130,9 +134,13 @@ class GraphVisualizer:
 
     def initial_widgets(self):
         """ Add buttons and graph area with modern style """
-    
+
         # Left panel buttons
         ttk.Button(self.left_frame, text="File...", command=self.PopupFile).pack(pady=10, fill="x")
+
+        # --- Airspace Data Quick Load Button ---
+        ttk.Button(self.left_frame, text="Airspace Data...", command=self.PopupAirspaceData).pack(pady=2, fill="x")
+
         self.save_btn = ttk.Button(self.left_frame, text="Save Graph", command=self.GraphSaveDirect)
         self.export_btn = ttk.Button(self.left_frame, text="Export to Google Earth", command=self.export_to_google_earth)
         
@@ -212,7 +220,7 @@ class GraphVisualizer:
 
     def clear_graph(self):
         self.ax1.clear()
-        self.ax1.set_title("Graph Visualization")
+        self.ax1.set_title(self.graph_title)
         self.ax1.grid(True)
         # Clear any special plot tracking so export only exports what is currently shown
         self.last_special_plot = None
@@ -246,6 +254,52 @@ class GraphVisualizer:
         ttk.Button(add_win, text="NavSegment", command=lambda: [self.AddSegment_(), add_win.destroy()]).grid(row=1, column=1, sticky="nsew")
         ttk.Button(add_win, text="Cancel", command=add_win.destroy).grid(row=2, column=0, columnspan=2, sticky="nsew", pady=(5, 0))
 
+    def PopupAirspaceData(self):
+        airspace_win = tk.Toplevel()
+        airspace_win.geometry(f"+{self.left_frame.winfo_rootx()+80}+{self.left_frame.winfo_rooty()+140}")
+        airspace_win.wm_overrideredirect(True)
+        ttk.Label(airspace_win, text="Quick Load Airspace:").grid(row=0, column=0, columnspan=3, sticky="nsew", pady=(0, 5))
+        ttk.Button(airspace_win, text="CAT", command=lambda: [self.quick_load_airspace("CAT"), airspace_win.destroy()]).grid(row=1, column=0, sticky="nsew", padx=2)
+        ttk.Button(airspace_win, text="SPAIN", command=lambda: [self.quick_load_airspace("SPAIN"), airspace_win.destroy()]).grid(row=1, column=1, sticky="nsew", padx=2)
+        ttk.Button(airspace_win, text="ECAC", command=lambda: [self.quick_load_airspace("ECAC"), airspace_win.destroy()]).grid(row=1, column=2, sticky="nsew", padx=2)
+        ttk.Button(airspace_win, text="Cancel", command=airspace_win.destroy).grid(row=2, column=0, columnspan=3, sticky="nsew", pady=(5, 0))
+
+    def quick_load_airspace(self, airspace_name):
+        self.graph_title = airspace_name + " Airspace"
+        # Define the file paths for each airspace set
+        base_dir = os.path.join("data", "AirSpaces")
+        paths = {
+            "CAT": {
+                "nav": os.path.join(base_dir, "Catalonia_data/CAT_nav.txt"),
+                "seg": os.path.join(base_dir, "Catalonia_data/CAT_seg.txt"),
+                "aer": os.path.join(base_dir, "Catalonia_data/CAT_aer.txt"),
+            },
+            "SPAIN": {
+                "nav": os.path.join(base_dir, "Spain_data/SPAIN_nav.txt"),
+                "seg": os.path.join(base_dir, "Spain_data/SPAIN_seg.txt"),
+                "aer": os.path.join(base_dir, "Spain_data/SPAIN_aer.txt"),
+            },
+            "ECAC": {
+                "nav": os.path.join(base_dir, "ECAC_data/ECAC_nav.txt"),
+                "seg": os.path.join(base_dir, "ECAC_data/ECAC_seg.txt"),
+                "aer": os.path.join(base_dir, "ECAC_data/ECAC_aer.txt"),
+            }
+        }
+        files = paths.get(airspace_name)
+        if not files or not all(os.path.exists(f) for f in files.values()):
+            messagebox.showerror("Error", f"Files for {airspace_name} not found in {base_dir}.")
+            return
+        self.nav_points_file = files["nav"]
+        self.nav_segments_file = files["seg"]
+        self.nav_airports_file = files["aer"]
+        self.main_widgets()
+        self.load = True
+        self.clear_graph()
+        self.graph.read_airspace(self.nav_points_file, self.nav_segments_file, self.nav_airports_file)
+        self.clear_graph()
+        self.graph.Plot(self.ax1)
+        self.canvas.draw()
+        
         # Métodos para las acciones
     def GraphLoad(self):
         carpeta = filedialog.askdirectory(title="Selecciona la carpeta con los archivos .txt", initialdir="data/AirSpaces")
@@ -262,6 +316,7 @@ class GraphVisualizer:
                 self.nav_segments_file = ruta_completa
             elif "aer" in archivo and archivo.endswith(".txt"):
                 self.nav_airports_file = ruta_completa
+        self.graph_title = os.path.basename(self.nav_points_file).split("_")[0] + " Airspace"
         # self.nav_points_file = filedialog.askopenfilename(title="Select Graph Data File", filetypes=[("Text Files", "*.txt")])
         if not self.nav_points_file:
             print("No se ha seleccionado ningún archivo de puntos.")
@@ -281,6 +336,7 @@ class GraphVisualizer:
         self.clear_graph()
         self.graph.Plot(self.ax1)
         self.canvas.draw()
+
     def GraphCreate(self):
         folder_selected = filedialog.askdirectory(title="Select Folder to Save Graph")
         if not folder_selected:
@@ -303,6 +359,7 @@ class GraphVisualizer:
         except Exception as e:
             messagebox.showerror("Error", f"Could not create file: {e}")
             return
+        self.graph_title = os.path.basename(self.nav_points_file).split("_")[0] + " Airspace"
         self.graph = AirSpace()  # Reset to a new, empty graph
         # --- Insta-save the empty graph ---
         self.graph.save_graph([self.nav_points_file, self.nav_segments_file, self.nav_airports_file])
@@ -354,6 +411,7 @@ class GraphVisualizer:
         self.graph.Plot(self.ax1)
         # self.graph.save_graph([self.nav_points_file,self.nav_segments_file,self.nav_airports_file]) #Para guardado automatico
         self.canvas.draw()
+        
     def AddSegment_(self): #FUNCIONA
         try:
             c1 = simpledialog.askinteger("Input", "Enter origin point code:")
@@ -372,6 +430,7 @@ class GraphVisualizer:
         self.graph.AddNavSegment(c1, c2)
         self.graph.Plot(self.ax1)
         self.canvas.draw()
+
     def DeleteNode_(self,event): #FUNCIONA
         min_dist = (((self.ax1.get_xlim()[1]-self.ax1.get_xlim()[0])**2+(self.ax1.get_ylim()[1]-self.ax1.get_ylim()[0])**2)**0.5)/self.tquocient
         selected_point = None
