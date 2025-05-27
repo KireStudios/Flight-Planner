@@ -9,6 +9,7 @@ from navAirport import *
 import os
 import webbrowser
 import pygame
+import random
 
 def pulsate_warning(widget, iterations=4, pulse_speed=25):
     style = widget.cget('style') or 'Header.TLabel'
@@ -209,6 +210,7 @@ class GraphVisualizer:
         file_win = tk.Toplevel()
         file_win.geometry(f"+{self.left_frame.winfo_rootx()+80}+{self.left_frame.winfo_rooty()+80}")
         file_win.wm_overrideredirect(True)
+        file_win.configure(bg=self.theme_palette.get(self.selected_theme.get().lower(), "#DDDDDD"))
         ttk.Label(file_win, text="File:").grid(row=0, column=0, columnspan=2, sticky="nsew", pady=(0, 5))
         ttk.Button(file_win, text="Load Graph", command=lambda: [self.GraphLoad(), file_win.destroy()]).grid(row=1, column=0, sticky="nsew")
         ttk.Button(file_win, text="Create Graph", command=lambda: [self.GraphCreate(), file_win.destroy()]).grid(row=1, column=1, sticky="nsew")
@@ -256,6 +258,7 @@ class GraphVisualizer:
 
     def PopupAirspaceData(self):
         airspace_win = tk.Toplevel()
+        airspace_win.configure(bg=self.theme_palette.get(self.selected_theme.get().lower(), "#DDDDDD"))
         airspace_win.geometry(f"+{self.left_frame.winfo_rootx()+80}+{self.left_frame.winfo_rooty()+140}")
         airspace_win.wm_overrideredirect(True)
         ttk.Label(airspace_win, text="Quick Load Airspace:").grid(row=0, column=0, columnspan=3, sticky="nsew", pady=(0, 5))
@@ -264,7 +267,85 @@ class GraphVisualizer:
         ttk.Button(airspace_win, text="ECAC", command=lambda: [self.quick_load_airspace("ECAC"), airspace_win.destroy()]).grid(row=1, column=2, sticky="nsew", padx=2)
         ttk.Button(airspace_win, text="Cancel", command=airspace_win.destroy).grid(row=2, column=0, columnspan=3, sticky="nsew", pady=(5, 0))
 
+    def loading(self, message="Loading...", parent=None):
+        """Show a spinning progress bar and a random fun fact. Returns the window to be destroyed after loading."""
+        facts = [
+          "✈️ The Wright brothers invented and flew the first airplane in 1903.",
+          "🛫 The busiest airport in the world is Hartsfield–Jackson Atlanta International Airport.",
+          "🌍 There are over 40,000 airports in the world.",
+          "🛰️ The first commercial jet was the de Havilland Comet.",
+          "🚁 Helicopters can take off and land vertically!",
+          "🛩️ The longest non-stop commercial flight is over 18 hours.",
+          "🌦️ Pilots use the NATO phonetic alphabet for clear communication.",
+          "🦅 Birds inspired the design of early airplanes.",
+          "🌙 Some airports have runways lit up like a rainbow at night.",
+          "🧭 The autopilot was invented in 1912!",
+          "✈️ The Concorde could fly from New York to London in under 3 hours. Speedy... and loud.",
+          "🛫 The average commercial airplane takes off at around 180 mph—because crawling into the sky wouldn’t be dramatic enough.",
+          "🌍 At any given moment, there are about 9,700 planes in the sky. Think of it as sky traffic—without the horns.",
+          "🛰️ GPS signals used in aviation come from satellites 12,550 miles away. And you still miss the turn.",
+          "🚁 Helicopters don’t actually fly—they just beat the air into submission.",
+          "🛩️ The Boeing 747 has over 6 million parts. No pressure.",
+          "🌦️ Pilots train for lightning strikes. Planes can survive them. Your Wi-Fi, however, cannot.",
+          "🦅 Birds inspired airplanes, but ironically, bird strikes are now a thing. Thanks, nature.",
+          "🌙 Some airport runways use color-coded lights to prevent collisions. Like a disco—if the disco could kill you.",
+          "🧭 Autopilot: invented in 1912 so pilots could stop pretending to enjoy flying straight for 6 hours.",
+          "✈️ The wings of a Boeing 777 flex up to 26 feet during flight. Just like your sanity on long-haul trips.",
+          "🛫 Air traffic controllers guide over 100,000 flights per day. Yes, your delay was still 'unexpected.'",
+          "🌍 The shortest commercial flight is 1.7 miles long. It takes longer to fasten your seatbelt.",
+          "🛰️ Inmarsat satellites help planes stay connected mid-flight. For when you simply *must* send that meme at 38,000 feet.",
+          "🚁 The word 'helicopter' comes from Greek: 'helix' (spiral) and 'pteron' (wing). Nothing says 'safe' like ancient etymology.",
+          "🛩️ Pilots have to sleep too. That’s why long flights have 'resting' pilots and 'pretending to rest' copilots.",
+          "🌦️ Wind shear is a sudden change in wind speed or direction. Mother Nature’s way of keeping pilots humble.",
+          "🦅 The FAA requires reporting bird strikes. Somewhere, there’s paperwork filed on a seagull named Kevin.",
+          "🌙 Some runways use embedded LEDs for low-visibility landings. Like landing on a very expensive Lite-Brite.",
+          "🧭 Some planes have backup magnetic compasses... just in case all the 21st-century tech decides to quit.",
+          "✈️ Commercial jets cruise at around 35,000 feet—because flying any higher might bruise the egos of astronauts.",
+          "🛫 The word 'Mayday' comes from the French 'm'aidez'—meaning 'help me.' Aviation: multilingual panic since 1910.",
+          "🌍 The ICAO airport code for Reykjavik is BIRK. Ironically, it's rarely sunny enough for actual birds.",
+          "🛰️ ADS-B allows planes to constantly broadcast their position. Like a flying stalker with a radio.",
+          "🚁 Tiltrotor aircraft combine the features of helicopters and airplanes. Because one kind of danger wasn’t enough.",
+          "🛩️ Some planes land with reverse thrust and spoilers—aviation’s version of slamming the brakes and opening the car doors.",
+          "🌦️ Clouds have classifications. Stratus, cumulus, and the one that ruined your vacation.",
+          "🦅 A flock of geese once forced a jet to land in the Hudson River. Goose 1, Jet 0.",
+          "🌙 The longest paved runway is over 18,000 feet. Yes, it’s for planes. No, you can't drag race on it.",
+          "🧭 In the cockpit, clocks are set to UTC—so pilots can argue about time zones in a globally consistent way."
+        ]
+
+        fact = random.choice(facts)
+        win = tk.Toplevel(parent or self.root)
+        win.title("Loading...")
+
+        # --- Center the window on the screen ---
+        w, h = 360, 140
+        sw = win.winfo_screenwidth()
+        sh = win.winfo_screenheight()
+        x = (sw // 2)
+        y = (sh // 2)
+        win.geometry(f"{w}x{h}+{x}+{y}")
+        win.resizable(False, False)
+        win.grab_set()
+
+        # --- Use theme color ---
+        color = self.theme_palette.get(self.selected_theme.get().lower(), "#DDDDDD")
+        fg = "#222" if self.selected_theme.get().lower() in ["default", "light", "sunny day", "lemon cream", "rose mist"] else "#fff"
+        style = ttk.Style(win)
+        style.configure("Loading.TFrame", background=color)
+        style.configure("Loading.TLabel", background=color, foreground=fg, font=('Segoe UI', 12, 'bold'))
+        style.configure("Loading.Fact.TLabel", background=color, foreground=fg, font=('Segoe UI', 10, 'italic'))
+        style.configure("Loading.TProgressbar", background="#4A90E2", troughcolor=color)
+
+        frame = ttk.Frame(win, style="Loading.TFrame", padding=(10, 10))
+        frame.pack(expand=True, fill="both")
+
+        ttk.Label(frame, text=message, style="Loading.TLabel", anchor="center").pack(pady=(4, 2), fill="x")
+        ttk.Label(frame, text=fact, style="Loading.Fact.TLabel", wraplength=320, anchor="center", justify="center").pack(pady=(0, 8), fill="x")
+
+        win.update()
+        return win
+
     def quick_load_airspace(self, airspace_name):
+        progress_win = self.loading(f"Loading {airspace_name} airspace...")
         self.graph_title = airspace_name + " Airspace"
         # Define the file paths for each airspace set
         base_dir = os.path.join("data", "AirSpaces")
@@ -288,6 +369,7 @@ class GraphVisualizer:
         files = paths.get(airspace_name)
         if not files or not all(os.path.exists(f) for f in files.values()):
             messagebox.showerror("Error", f"Files for {airspace_name} not found in {base_dir}.")
+            progress_win.destroy()
             return
         self.nav_points_file = files["nav"]
         self.nav_segments_file = files["seg"]
@@ -299,12 +381,15 @@ class GraphVisualizer:
         self.clear_graph()
         self.graph.Plot(self.ax1)
         self.canvas.draw()
+        progress_win.destroy()
         
         # Métodos para las acciones
     def GraphLoad(self):
         carpeta = filedialog.askdirectory(title="Selecciona la carpeta con los archivos .txt", initialdir="data/AirSpaces")
         if not carpeta:
             print("No se ha seleccionado ninguna carpeta.")
+            return
+        progress_win = self.loading("Loading graph data...")
         self.nav_points_file = None
         self.nav_segments_file = None
         self.nav_airports_file = None    
@@ -320,14 +405,17 @@ class GraphVisualizer:
         # self.nav_points_file = filedialog.askopenfilename(title="Select Graph Data File", filetypes=[("Text Files", "*.txt")])
         if not self.nav_points_file:
             print("No se ha seleccionado ningún archivo de puntos.")
+            progress_win.destroy()
             return
         # self.nav_segments_file = filedialog.askopenfilename(title="Select Graph Data File", filetypes=[("Text Files", "*.txt")])
         if not self.nav_segments_file:
             print("No se ha seleccionado ningún archivo de segmentos.")
+            progress_win.destroy()
             return #tenkiu
         # self.nav_airports_file = filedialog.askopenfilename(title="Select Graph Data File", filetypes=[("Text Files", "*.txt")])
         if not self.nav_airports_file:
             print("No se ha seleccionado ningún archivo de aeropuertos.")
+            progress_win.destroy()
             return 
         self.main_widgets() 
         self.load = True
@@ -336,6 +424,7 @@ class GraphVisualizer:
         self.clear_graph()
         self.graph.Plot(self.ax1)
         self.canvas.draw()
+        progress_win.destroy()
 
     def GraphCreate(self):
         folder_selected = filedialog.askdirectory(title="Select Folder to Save Graph")
@@ -346,6 +435,7 @@ class GraphVisualizer:
         if not file_name:
             messagebox.showerror("Error", "No file name entered.")
             return
+        progress_win = self.loading("Creating new graph...")
         self.nav_points_file = os.path.join(folder_selected, file_name + "_nav.txt")
         self.nav_segments_file = os.path.join(folder_selected, file_name + "_seg.txt")
         self.nav_airports_file = os.path.join(folder_selected, file_name + "_aer.txt")
@@ -358,6 +448,7 @@ class GraphVisualizer:
                 file.write("")
         except Exception as e:
             messagebox.showerror("Error", f"Could not create file: {e}")
+            progress_win.destroy()
             return
         self.graph_title = os.path.basename(self.nav_points_file).split("_")[0] + " Airspace"
         self.graph = AirSpace()  # Reset to a new, empty graph
@@ -370,6 +461,7 @@ class GraphVisualizer:
         self.graph.read_airspace(self.nav_points_file, self.nav_segments_file, self.nav_airports_file)
         self.graph.Plot(self.ax1)
         self.canvas.draw()
+        progress_win.destroy()
 
     def NodeNeighbors_(self,event): #FUNCIONA
         if event.inaxes != self.ax1:
@@ -414,18 +506,20 @@ class GraphVisualizer:
         
     def AddSegment_(self): #FUNCIONA
         try:
-            c1 = simpledialog.askinteger("Input", "Enter origin point code:")
+            c1 = simpledialog.askstring("Input", "Enter origin point name:")
             if c1 is None:
                 messagebox.showerror("Error", "Point must be registered or check the name.")
                 return
-            c2 = simpledialog.askinteger("Input", "Enter destination point code:")
+            c2 = simpledialog.askstring("Input", "Enter destination point name:")
             if c2 is None:
-                messagebox.showerror("Error", "Nodes must be registered or check the name.")
+                messagebox.showerror("Error", "Point must be registered or check the name.")
                 return
         except ValueError:
             messagebox.showerror("Error", "Invalid nodes.")
             return
         if c1 == None or c2 == None: return
+        c1 = c1.number
+        c2 = c2.number
         self.clear_graph()
         self.graph.AddNavSegment(c1, c2)
         self.graph.Plot(self.ax1)
