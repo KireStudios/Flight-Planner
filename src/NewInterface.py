@@ -61,6 +61,7 @@ class GraphVisualizer:
         self.info_widgets = {}
         self.route_origin = None
         self.route_selecting = False
+        self.current_route_path = None  # <-- Add this line
 
         # Set ttk theme and theme palette
         self.style = ttk.Style(self.root)
@@ -486,9 +487,10 @@ class GraphVisualizer:
             messagebox.showerror("Error", "Invalid points.")
             return
         self.clear_graph()
-        path=self.graph.FindShortestPath(origin, destination)
+        path = self.graph.FindShortestPath(origin, destination)
         self.graph.PlotPath(self.ax1, path)
         self.canvas.draw()
+        self.current_route_path = path  # <-- Store the route path
 
     def GraphSaveDirect(self):
         # Save directly to the currently loaded/created files
@@ -678,14 +680,70 @@ class GraphVisualizer:
             '<name>Flight Planner Export</name>',
             # Styles
             '<Style id="nodeStyle"><IconStyle><color>ff0000ff</color><scale>1.1</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon></IconStyle></Style>',
+            '<Style id="deactivatedNodeStyle"><IconStyle><color>ddddddaa</color><scale>1.1</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon></IconStyle></Style>',
             '<Style id="segmentStyle"><LineStyle><color>ff00ffff</color><width>3</width></LineStyle></Style>',
             '<Style id="airportStyle"><IconStyle><color>ff00ff00</color><scale>1.3</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/airports.png</href></Icon></IconStyle></Style>',
         ]
 
-        # Export NavPoints (nodes)
-        if self.graph.show_pts:
-            for p in self.graph.pts:
-                kml.append(f'''
+        drawn_pts = []
+
+        # --- Only export the current route if it exists ---
+        if self.current_route_path and len(self.current_route_path) > 1:
+            # Export only the route nodes
+            if self.graph.show_pts_var.get():
+                for p in self.current_route_path:
+                    drawn_pts.append(p)
+                    kml.append(f'''
+<Placemark>
+    <name>{p.name} (#{p.number})</name>
+    <styleUrl>#nodeStyle</styleUrl>
+    <Point>
+        <coordinates>{kml_coords(p.lat, p.lon)}</coordinates>
+    </Point>
+</Placemark>
+''')
+            # Export only the route segments
+            if self.graph.show_seg_var.get():
+                for i in range(len(self.current_route_path) - 1):
+                    org = self.current_route_path[i]
+                    des = self.current_route_path[i+1]
+                    kml.append(f'''
+<Placemark>
+    <name>{org.name} → {des.name}</name>
+    <styleUrl>#segmentStyle</styleUrl>
+    <LineString>
+        <coordinates>
+            {kml_coords(org.lat, org.lon)}
+            {kml_coords(des.lat, des.lon)}
+        </coordinates>
+    </LineString>
+</Placemark>
+''')
+        # --- Fallback: export the whole graph as before, or gray points if route is done ---
+        else:
+            # Export Segments (edges)
+            if self.graph.show_seg_var.get():
+                for s in self.graph.seg:
+                    # Find origin and destination points
+                    org = next((p for p in self.graph.pts if p.number == s.org), None)
+                    des = next((p for p in self.graph.pts if p.number == s.des), None)
+                    if org and des:
+                        kml.append(f'''
+<Placemark>
+    <name>{org.name} → {des.name}</name>
+    <styleUrl>#segmentStyle</styleUrl>
+    <LineString>
+        <coordinates>
+            {kml_coords(org.lat, org.lon)}
+            {kml_coords(des.lat, des.lon)}
+        </coordinates>
+    </LineString>
+</Placemark>
+''')
+
+            if self.graph.show_pts_var.get():
+                for p in self.graph.pts:
+                        kml.append(f'''
 <Placemark>
     <name>{p.name} (#{p.number})</name>
     <styleUrl>#nodeStyle</styleUrl>
@@ -695,8 +753,9 @@ class GraphVisualizer:
 </Placemark>
 ''')
 
+        # Always export Airports
         # Export Airports
-        if self.graph.show_airports:
+        if self.graph.show_airports_var.get():
             for a in self.graph.aip:
                 # Airports are treated as special NavPoints, and as not knowing their position we use the one of their first SID
                 b = a.SIDs[0]
@@ -709,24 +768,17 @@ class GraphVisualizer:
     </Point>
 </Placemark>
 ''')
-
-        # Export Segments (edges)
-        if self.graph.show_seg:
-            for s in self.graph.seg:
-                # Find origin and destination points
-                org = next((p for p in self.graph.pts if p.number == s.org), None)
-                des = next((p for p in self.graph.pts if p.number == s.des), None)
-                if org and des:
-                    kml.append(f'''
+        # gray out all points not in the route if deactivated is enabled
+        if self.graph.show_pts_var.get() and self.graph.show_deactivated_var.get():
+                for p in self.graph.pts:
+                    if p not in drawn_pts:
+                        kml.append(f'''
 <Placemark>
-    <name>{org.name} → {des.name}</name>
-    <styleUrl>#segmentStyle</styleUrl>
-    <LineString>
-        <coordinates>
-            {kml_coords(org.lat, org.lon)}
-            {kml_coords(des.lat, des.lon)}
-        </coordinates>
-    </LineString>
+    <name>{p.name} (#{p.number})</name>
+    <styleUrl>#deactivatedNodeStyle</styleUrl>
+    <Point>
+        <coordinates>{kml_coords(p.lat, p.lon)}</coordinates>
+    </Point>
 </Placemark>
 ''')
 
@@ -961,6 +1013,7 @@ class GraphVisualizer:
             self.clear_graph()
             self.graph.PlotPath(self.ax1, full_path)
             self.canvas.draw()
+            self.current_route_path = full_path  # <-- Store the route path
 
         ttk.Button(self.route_frame, text="Calculate Route", command=calculate_route).pack(pady=10)
         ttk.Button(self.route_frame, text="Close", command=close_route_tab).pack()
@@ -1156,11 +1209,12 @@ class GraphVisualizer:
             options_inner_frame = ttk.Frame(options_frame)
             options_inner_frame.pack(anchor="center")
             self.options_inner_frame = options_inner_frame
-            ttk.Button(options_inner_frame, text="Hide Nodes", command=lambda: [self.graph.ShowPts(self.ax1, False), self.canvas.draw()]).pack(side="left", padx=(0, 5))
-            ttk.Button(options_inner_frame, text="Show Nodes", command=lambda: [self.graph.ShowPts(self.ax1, True), self.canvas.draw()]).pack(side="left", padx=(0, 5))
-            ttk.Button(options_inner_frame, text="Hide Segments", command=lambda: [self.graph.ShowSeg(self.ax1, False), self.canvas.draw()]).pack(side="left", padx=(0, 5))
-            ttk.Button(options_inner_frame, text="Show Segments", command=lambda: [self.graph.ShowSeg(self.ax1, True), self.canvas.draw()]).pack(side="left", padx=(0, 5))
-            ttk.Checkbutton(options_inner_frame, text="Show Names", variable=self.graph.show_names, command=lambda: [self.graph.ToggleNames(self.ax1, self.graph.show_names.get()), self.canvas.draw()]).pack(side="left", padx=(0, 5))
+            
+            ttk.Checkbutton(options_inner_frame, text="Show Nodes", variable=self.graph.show_pts_var, command=lambda: [self.graph.TogglePts(self.ax1, self.graph.show_pts_var.get()), self.canvas.draw()]).pack(side="left", padx=(0, 5))
+            ttk.Checkbutton(options_inner_frame, text="Show Segments", variable=self.graph.show_seg_var, command=lambda: [self.graph.ToggleSeg(self.ax1, self.graph.show_seg_var.get()), self.canvas.draw()]).pack(side="left", padx=(0, 5))
+            ttk.Checkbutton(options_inner_frame, text="Show Airports", variable=self.graph.show_airports_var, command=lambda: [self.graph.ToggleAirports(self.ax1, self.graph.show_airports_var.get()), self.canvas.draw()]).pack(side="left", padx=(0, 5))
+            ttk.Checkbutton(options_inner_frame, text="Show Names", variable=self.graph.show_names_var, command=lambda: [self.graph.ToggleNames(self.ax1, self.graph.show_names_var.get()), self.canvas.draw()]).pack(side="left", padx=(0, 5))
+            ttk.Checkbutton(options_inner_frame, text="Show Deactivated", variable=self.graph.show_deactivated_var, command=lambda: [self.graph.ToggleDeactivated(self.ax1, self.graph.show_deactivated_var.get()), self.canvas.draw()]).pack(side="left", padx=(0, 5))
 
         ttk.Button(self.settings_frame, text="Close", command=close_settings_tab).pack(pady=(0, 10))
 
@@ -1190,6 +1244,7 @@ class GraphVisualizer:
         self.style.configure('Header.TLabel', foreground=fg)
         self.style.configure('TButton', foreground=fg)
         self.style.configure('TCombobox', foreground=fg)
+        self.style.configure('TCheckbutton', foreground=fg)
         self.style.configure('TNotebook.Tab', foreground=fg)
 
         self.root.configure(bg=color)
