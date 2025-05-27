@@ -136,6 +136,9 @@ class GraphVisualizer:
         self.save_btn = ttk.Button(self.left_frame, text="Save Graph", command=self.GraphSaveDirect)
         self.export_btn = ttk.Button(self.left_frame, text="Export to Google Earth", command=self.export_to_google_earth)
         
+        # Add About button at the bottom left
+        ttk.Button(self.left_frame, text="About", command=self.open_about).pack(side="bottom", pady=10, fill="x")
+
         # Do not pack save_btn, export_btn, or reset_btn yet
 
         # Right panel buttons
@@ -567,6 +570,7 @@ class GraphVisualizer:
     def on_node_selector_keyrelease(self, event):
         typed = self.node_selector_var.get().lower()
         all_values = [f"{p.name} (#{p.number})" for p in self.graph.pts]
+        all_values += [f"{a.name} [AP]" for a in self.graph.aip]
         filtered = [v for v in all_values if typed in v.lower()]
         self.node_selector['values'] = filtered
 
@@ -589,9 +593,7 @@ class GraphVisualizer:
         # Include both points and airports in the selector
         typed = self.node_selector_var.get().strip().lower()
         values = [f"{p.name} (#{p.number})" for p in self.graph.pts]
-        # Add airports
-        if hasattr(self.graph, "airports"):
-            values += [f"{a.name} [AP]" for a in self.graph.airports]
+        values += [f"{a.name} [AP]" for a in self.graph.aip]
         if not typed:
             self.node_selector['values'] = values
         else:
@@ -602,7 +604,7 @@ class GraphVisualizer:
         # Check if it's an airport
         if "[AP]" in selected:
             name = selected.split(" [AP]")[0]
-            for a in getattr(self.graph, "airports", []):
+            for a in self.graph.aip:
                 if a.name == name:
                     self.selected_point = a
                     self.update_info_panel(a)
@@ -630,29 +632,37 @@ class GraphVisualizer:
         name_var = tk.StringVar(value=point.name)
         name_entry = ttk.Entry(self.info_frame, textvariable=name_var)
         name_entry.pack(fill="x")
-        ttk.Label(self.info_frame, text="Latitude:").pack(anchor="w")
-        lat_var = tk.DoubleVar(value=point.lat)
-        lat_entry = ttk.Entry(self.info_frame, textvariable=lat_var)
-        lat_entry.pack(fill="x")
-        ttk.Label(self.info_frame, text="Longitude:").pack(anchor="w")
-        lon_var = tk.DoubleVar(value=point.lon)
-        lon_entry = ttk.Entry(self.info_frame, textvariable=lon_var)
-        lon_entry.pack(fill="x")
+
+        # Only show lat/lon for NavPoint, not for Airport
+        if hasattr(point, "lat") and hasattr(point, "lon"):
+            ttk.Label(self.info_frame, text="Latitude:").pack(anchor="w")
+            lat_var = tk.DoubleVar(value=point.lat)
+            lat_entry = ttk.Entry(self.info_frame, textvariable=lat_var)
+            lat_entry.pack(fill="x")
+            ttk.Label(self.info_frame, text="Longitude:").pack(anchor="w")
+            lon_var = tk.DoubleVar(value=point.lon)
+            lon_entry = ttk.Entry(self.info_frame, textvariable=lon_var)
+            lon_entry.pack(fill="x")
+        else:
+            lat_var = None
+            lon_var = None
 
         def save_changes():
             point.name = name_var.get()
-            try:
-                point.lat = float(lat_var.get())
-                point.lon = float(lon_var.get())
-            except ValueError:
-                messagebox.showerror("Error", "Latitude and Longitude must be numbers.")
-                return
+            if lat_var is not None and lon_var is not None:
+                try:
+                    point.lat = float(lat_var.get())
+                    point.lon = float(lon_var.get())
+                except ValueError:
+                    messagebox.showerror("Error", "Latitude and Longitude must be numbers.")
+                    return
             self.clear_graph()
             self.graph.Plot(self.ax1)
             self.canvas.draw()
             messagebox.showinfo("Saved", "Node info updated.")
             self.update_node_selector_values()  # Only here, after save
-            self.node_selector_var.set(f"{point.name} (#{point.number})")
+            self.node_selector_var.set(f"{point.name} (#{point.number})" if hasattr(point, "number") else f"{point.name} [AP]")
+
         ttk.Button(self.info_frame, text="Save Changes", command=save_changes).pack(pady=10)
 
         # --- Add action buttons below ---
@@ -668,6 +678,7 @@ class GraphVisualizer:
 
     # Helper methods for the info panel actions:
     def show_neighbors(self, point):
+        if hasattr(point, 'SIDs'): point = point.SIDs[0]
         self.clear_graph()
         self.graph.PlotNeighbors(self.ax1, point.number)
         self.canvas.draw()
@@ -683,6 +694,7 @@ class GraphVisualizer:
         }
 
     def show_reachability(self, point):
+        if hasattr(point, 'SIDs'): point = point.SIDs[0]
         self.clear_graph()
         self.graph.PlotReachability(self.ax1, point.name)
         self.canvas.draw()
@@ -910,6 +922,7 @@ class GraphVisualizer:
         self.notebook.add(self.route_frame, text="Route Planner")
         self.notebook.select(self.route_frame)
 
+        if hasattr(origin_point, 'SIDs'): origin_point = origin_point.SIDs[0] 
         ttk.Label(self.route_frame, text=f"Origin: {origin_point.name} (#{origin_point.number})", font=('Segoe UI', 12, 'bold')).pack(anchor="w", pady=(0, 10))
 
         # Get all reachable nodes from the origin (excluding the origin itself)
@@ -917,8 +930,7 @@ class GraphVisualizer:
         reachable_points = [p for p in reachable_points if p.number != getattr(origin_point, "number", None)]
         # Add airports as possible destinations
         all_dest_values = [f"{p.name} (#{p.number})" for p in reachable_points]
-        if hasattr(self.graph, "airports"):
-            all_dest_values += [f"{a.name} [AP]" for a in self.graph.airports if a.name != origin_point.name]
+        all_dest_values += [f"{a.name} [AP]" for a in self.graph.aip if (a.name != origin_point.name and any(pt in reachable_points for pt in a.STARs))]
 
         # Destination selector
         ttk.Label(self.route_frame, text="Destination:").pack(anchor="w")
@@ -955,7 +967,7 @@ class GraphVisualizer:
         def get_point_from_str(s):
             if "[AP]" in s:
                 name = s.split(" [AP]")[0]
-                return next((a for a in getattr(self.graph, "airports", []) if a.name == name), None)
+                return next((a for a in self.graph.aip if a.name == name), None)
             code = int(s.split("#")[-1].split(")")[0])
             return next((p for p in self.graph.pts if p.number == code), None)
 
@@ -1071,12 +1083,6 @@ class GraphVisualizer:
             route_points = [origin_point] + waypoints + [dest_point]
             full_path = []
 
-            # If origin is airport, add SID
-            if hasattr(origin_point, "get_sid_path"):
-                sid_path = origin_point.get_sid_path()  # Implement this method in your airport class
-                if sid_path:
-                    full_path.extend(sid_path)
-
             # Main route segments
             for i in range(len(route_points) - 1):
                 segment = self.graph.FindShortestPath(route_points[i].name, route_points[i+1].name)
@@ -1086,12 +1092,6 @@ class GraphVisualizer:
                 if i > 0 or full_path:  # Avoid duplicate nodes
                     segment = segment[1:]
                 full_path.extend(segment)
-
-            # If destination is airport, add STAR
-            if hasattr(dest_point, "get_star_path"):
-                star_path = dest_point.get_star_path()  # Implement this method in your airport class
-                if star_path:
-                    full_path.extend(star_path)
 
             # Plot the route on the main graph tab
             self.notebook.select(self.center_frame)
@@ -1302,6 +1302,60 @@ class GraphVisualizer:
             ttk.Checkbutton(options_inner_frame, text="Show Deactivated", variable=self.graph.show_deactivated_var, command=lambda: [self.graph.ToggleDeactivated(self.ax1, self.graph.show_deactivated_var.get()), self.reset_graph(), self.canvas.draw()]).pack(side="left", padx=(0, 5))
 
         ttk.Button(self.settings_frame, text="Close", command=close_settings_tab).pack(pady=(0, 10))
+
+    def open_about(self):
+        # Close previous About tab if open
+        if hasattr(self, 'about_frame') and self.about_frame and self.about_frame.winfo_exists():
+            self.notebook.forget(self.about_frame)
+        self.about_frame = ttk.Frame(self.notebook, padding=(10, 10))
+        self.notebook.add(self.about_frame, text="About")
+        self.notebook.select(self.about_frame)
+
+        # Project info
+        ttk.Label(self.about_frame, text="Flight Planner", style='Header.TLabel').pack(anchor="center", pady=(0, 10))
+        ttk.Label(self.about_frame, text="Version 4.0\n\nA modern tool for visualizing and planning flight routes.\n", font=('Segoe UI', 11)).pack(anchor="center")
+
+        # Features
+        features = (
+            "Extra Features:\n"
+            "- Route planner with waypoints and SID/STAR support\n"
+            "- Export to Google Earth (KML)\n"
+            "- Theme customization\n"
+            "- Music playback\n"
+            "- Node/segment/airport visibility toggles\n"
+            "- Node info editing and search\n"
+        )
+        ttk.Label(self.about_frame, text=features, font=('Segoe UI', 10)).pack(anchor="w", pady=(10, 0))
+
+        # Usage
+        usage = (
+            "How to Use:\n"
+            "1. Use 'File...' to load or create a graph.\n"
+            "2. Click nodes for options (neighbors, reachability, route, etc).\n"
+            "3. Use the left/right panels for saving, exporting, and settings.\n"
+            "4. Plan routes with the Route Planner tab.\n"
+            "5. Export your route or graph to Google Earth.\n"
+        )
+        ttk.Label(self.about_frame, text=usage, font=('Segoe UI', 10)).pack(anchor="w", pady=(10, 0))
+
+        # Team info
+        team = (
+            "Team:\n"
+            "Èrik Ventura Gili, Adrià Martínez Mirabent and Alex Sanz Rautiainen\n"
+        )
+        ttk.Label(self.about_frame, text=team, font=('Segoe UI', 10, 'italic')).pack(anchor="w", pady=(10, 0))
+
+        # Photo
+        try:
+            from PIL import Image, ImageTk
+            img = Image.open("team_photo.png")
+            img = img.resize((180, 120))
+            photo = ImageTk.PhotoImage(img)
+            label = ttk.Label(self.about_frame, image=photo)
+            label.image = photo  # Keep a reference!
+            label.pack(pady=(10, 0))
+        except Exception as e:
+            ttk.Label(self.about_frame, text="[Team photo not found]", font=('Segoe UI', 9, 'italic')).pack(pady=(10, 0))
 
     def apply_theme(self, theme_name):
         color = self.theme_palette.get(theme_name.lower(), "#DDDDDD")
