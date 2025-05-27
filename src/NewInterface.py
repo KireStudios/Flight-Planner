@@ -211,6 +211,9 @@ class GraphVisualizer:
         self.ax1.clear()
         self.ax1.set_title("Graph Visualization")
         self.ax1.grid(True)
+        # Clear any special plot tracking so export only exports what is currently shown
+        self.last_special_plot = None
+        print(self.last_special_plot)
 
     def PopupSelect(self, x, y, button, event):
         self.popup_win = tk.Toplevel()
@@ -323,6 +326,17 @@ class GraphVisualizer:
             self.clear_graph()
             self.graph.PlotNeighbors(self.ax1,selected_point.number)
             self.canvas.draw()
+            # Only outgoing neighbors (as displayed)
+            neighbors = [p for p in self.graph.pts if any(
+                s.org == selected_point.number and s.des == p.number
+                for s in self.graph.seg
+            )]
+            self.last_special_plot = {
+                'type': 'neighbors',
+                'points': [selected_point] + neighbors,
+                'segments': [(selected_point, n) for n in neighbors]
+            }
+
     def AddNavPoint_(self,event): #FUNCIONA
         try:
             code = simpledialog.askinteger("Input", "Enter point code:")
@@ -470,6 +484,22 @@ class GraphVisualizer:
             self.clear_graph()
             self.graph.PlotReachability(self.ax1, selected_point.name)
             self.canvas.draw()
+            # Track for export: points and segments between reachable nodes
+            reachable = self.graph.Reachability(selected_point.name)
+            all_points = [selected_point] + reachable
+            point_numbers = set(p.number for p in all_points)
+            segments = [
+                (org, des)
+                for s in self.graph.seg
+                for org in all_points
+                for des in all_points
+                if s.org == org.number and s.des == des.number
+            ]
+            self.last_special_plot = {
+                'type': 'reachability',
+                'points': all_points,
+                'segments': segments
+            }
         else:
             messagebox.showerror("Error", "No node found at click location.")
 
@@ -641,11 +671,37 @@ class GraphVisualizer:
         self.clear_graph()
         self.graph.PlotNeighbors(self.ax1, point.number)
         self.canvas.draw()
+        # Only outgoing neighbors (as displayed)
+        neighbors = [p for p in self.graph.pts if any(
+            s.org == point.number and s.des == p.number
+            for s in self.graph.seg
+        )]
+        self.last_special_plot = {
+            'type': 'neighbors',
+            'points': [point] + neighbors,
+            'segments': [(point, n) for n in neighbors]
+        }
 
     def show_reachability(self, point):
         self.clear_graph()
         self.graph.PlotReachability(self.ax1, point.name)
         self.canvas.draw()
+        # Track for export: points and segments between reachable nodes
+        reachable = self.graph.Reachability(point.name)
+        all_points = [point] + reachable
+        point_numbers = set(p.number for p in all_points)
+        segments = [
+            (org, des)
+            for s in self.graph.seg
+            for org in all_points
+            for des in all_points
+            if s.org == org.number and s.des == des.number
+        ]
+        self.last_special_plot = {
+            'type': 'reachability',
+            'points': all_points,
+            'segments': segments
+        }
 
     def delete_node_from_info(self, point):
         self.graph.DeleteNavPoint(point)
@@ -686,7 +742,6 @@ class GraphVisualizer:
         ]
 
         drawn_pts = []
-
         # --- Only export the current route if it exists ---
         if self.current_route_path and len(self.current_route_path) > 1:
             # Export only the route nodes
@@ -719,7 +774,37 @@ class GraphVisualizer:
     </LineString>
 </Placemark>
 ''')
-        # --- Fallback: export the whole graph as before, or gray points if route is done ---
+        # --- Export only what is shown for Neighbors or Reachability ---
+        elif hasattr(self, "last_special_plot") and self.last_special_plot:
+            # last_special_plot: dict with keys 'type' and 'points' and optionally 'segments'
+            special = self.last_special_plot
+            if self.graph.show_pts_var.get():
+                for p in special.get('points', []):
+                    drawn_pts.append(p)
+                    kml.append(f'''
+<Placemark>
+    <name>{p.name} (#{p.number})</name>
+    <styleUrl>#nodeStyle</styleUrl>
+    <Point>
+        <coordinates>{kml_coords(p.lat, p.lon)}</coordinates>
+    </Point>
+</Placemark>
+''')
+            if self.graph.show_seg_var.get() and 'segments' in special:
+                for org, des in special['segments']:
+                    kml.append(f'''
+<Placemark>
+    <name>{org.name} → {des.name}</name>
+    <styleUrl>#segmentStyle</styleUrl>
+    <LineString>
+        <coordinates>
+            {kml_coords(org.lat, org.lon)}
+            {kml_coords(des.lat, des.lon)}
+        </coordinates>
+    </LineString>
+</Placemark>
+''')
+        # --- Fallback: export the whole graph as before ---
         else:
             # Export Segments (edges)
             if self.graph.show_seg_var.get():
@@ -1210,11 +1295,11 @@ class GraphVisualizer:
             options_inner_frame.pack(anchor="center")
             self.options_inner_frame = options_inner_frame
             
-            ttk.Checkbutton(options_inner_frame, text="Show Nodes", variable=self.graph.show_pts_var, command=lambda: [self.graph.TogglePts(self.ax1, self.graph.show_pts_var.get()), self.canvas.draw()]).pack(side="left", padx=(0, 5))
-            ttk.Checkbutton(options_inner_frame, text="Show Segments", variable=self.graph.show_seg_var, command=lambda: [self.graph.ToggleSeg(self.ax1, self.graph.show_seg_var.get()), self.canvas.draw()]).pack(side="left", padx=(0, 5))
-            ttk.Checkbutton(options_inner_frame, text="Show Airports", variable=self.graph.show_airports_var, command=lambda: [self.graph.ToggleAirports(self.ax1, self.graph.show_airports_var.get()), self.canvas.draw()]).pack(side="left", padx=(0, 5))
-            ttk.Checkbutton(options_inner_frame, text="Show Names", variable=self.graph.show_names_var, command=lambda: [self.graph.ToggleNames(self.ax1, self.graph.show_names_var.get()), self.canvas.draw()]).pack(side="left", padx=(0, 5))
-            ttk.Checkbutton(options_inner_frame, text="Show Deactivated", variable=self.graph.show_deactivated_var, command=lambda: [self.graph.ToggleDeactivated(self.ax1, self.graph.show_deactivated_var.get()), self.canvas.draw()]).pack(side="left", padx=(0, 5))
+            ttk.Checkbutton(options_inner_frame, text="Show Nodes", variable=self.graph.show_pts_var, command=lambda: [self.graph.TogglePts(self.ax1, self.graph.show_pts_var.get()), self.reset_graph(), self.canvas.draw()]).pack(side="left", padx=(0, 5))
+            ttk.Checkbutton(options_inner_frame, text="Show Segments", variable=self.graph.show_seg_var, command=lambda: [self.graph.ToggleSeg(self.ax1, self.graph.show_seg_var.get()), self.reset_graph(), self.canvas.draw()]).pack(side="left", padx=(0, 5))
+            ttk.Checkbutton(options_inner_frame, text="Show Airports", variable=self.graph.show_airports_var, command=lambda: [self.graph.ToggleAirports(self.ax1, self.graph.show_airports_var.get()), self.reset_graph(), self.canvas.draw()]).pack(side="left", padx=(0, 5))
+            ttk.Checkbutton(options_inner_frame, text="Show Names", variable=self.graph.show_names_var, command=lambda: [self.graph.ToggleNames(self.ax1, self.graph.show_names_var.get()), self.reset_graph(), self.canvas.draw()]).pack(side="left", padx=(0, 5))
+            ttk.Checkbutton(options_inner_frame, text="Show Deactivated", variable=self.graph.show_deactivated_var, command=lambda: [self.graph.ToggleDeactivated(self.ax1, self.graph.show_deactivated_var.get()), self.reset_graph(), self.canvas.draw()]).pack(side="left", padx=(0, 5))
 
         ttk.Button(self.settings_frame, text="Close", command=close_settings_tab).pack(pady=(0, 10))
 
