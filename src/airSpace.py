@@ -24,6 +24,7 @@ class AirSpace:
 
     # Read the navigation points from the file and fill the nav_points list
     def read_nav_points(self, file_path):
+        self.pts.clear()  # Clear existing points
         try:
             with open(file_path, 'r') as file:
                 for line in file:
@@ -42,6 +43,7 @@ class AirSpace:
 
     # Read the navigation segments from the file and fill the nav_segments list
     def read_nav_segments(self, file_path):
+        self.seg.clear()
         try:
             with open(file_path, 'r') as file:
                 for line in file:
@@ -59,6 +61,7 @@ class AirSpace:
 
     # Read the airports from the file and fill the nav_airports list
     def read_airports(self, file_path):
+        self.aip.clear()
         try:
             with open(file_path, 'r') as file:
                 sids = []

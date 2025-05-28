@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, simpledialog
+from tkinter import ttk, filedialog, messagebox, simpledialog, PhotoImage
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from airSpace import *
@@ -129,10 +129,18 @@ class GraphVisualizer:
         self.style.configure('Custom.TFrame', background="#DDDDDD")
         self.style.configure('Custom.TLabel', background="#DDDDDD")
 
+        # --- Music tracks ---
+        self.music_tracks = [
+            ("White Palace", "resources/White_Palace.mp3"),
+            ("Sweden - C418", "resources/Sweden_C418.mp3"),
+            ("The Night King", "resources/The_Night_King.mp3"),
+        ]
+        random_track = random.choice(self.music_tracks)
+        self.selected_music = tk.StringVar(value=random_track[0])
         pygame.mixer.init()
-        pygame.mixer.music.load("White_Palace.mp3")
+        pygame.mixer.music.load(random_track[1])
         pygame.mixer.music.set_volume(0.4)
-        pygame.mixer.music.play(-1) 
+        pygame.mixer.music.play(-1)
 
         self.create_layout()
         # --- Apply default theme at startup ---
@@ -288,6 +296,7 @@ class GraphVisualizer:
         add_win = tk.Toplevel()
         add_win.geometry(f"+{int(x)+40}+{int(y)+40}")
         add_win.wm_overrideredirect(True)
+        add_win.configure(bg=self.theme_palette.get(self.selected_theme.get().lower(), "#DDDDDD"))
         ttk.Label(add_win, text="Add:").grid(row=0, column=0, columnspan=2, sticky="nsew", pady=(0, 5))
         ttk.Button(add_win, text="NavPoint (Node)", command=lambda: [self.AddNavPoint_(event), add_win.destroy()]).grid(row=1, column=0, sticky="nsew")
         ttk.Button(add_win, text="NavSegment", command=lambda: [self.AddSegment_(), add_win.destroy()]).grid(row=1, column=1, sticky="nsew")
@@ -420,7 +429,7 @@ class GraphVisualizer:
         self.canvas.draw()
         progress_win.destroy()
         
-        # Métodos para las acciones
+    # Métodos para las acciones
     def GraphLoad(self):
         carpeta = filedialog.askdirectory(title="Selecciona la carpeta con los archivos .txt", initialdir="data/AirSpaces")
         if not carpeta:
@@ -1420,6 +1429,7 @@ class GraphVisualizer:
         del_win = tk.Toplevel()
         del_win.geometry(f"+{int(x)+40}+{int(y)+40}")
         del_win.wm_overrideredirect(True)
+        del_win.configure(bg=self.theme_palette.get(self.selected_theme.get().lower(), "#DDDDDD"))
         ttk.Label(del_win, text="Delete:").grid(row=0, column=0, columnspan=2, sticky="nsew", pady=(0, 5))
         ttk.Button(del_win, text="Delete Node", command=lambda: [self.DeleteNode_(event), del_win.destroy()]).grid(row=1, column=0, sticky="nsew")
         ttk.Button(del_win, text="Delete Segment", command=lambda: [self.DeleteSegment_(event), del_win.destroy()]).grid(row=1, column=1, sticky="nsew")
@@ -1436,21 +1446,59 @@ class GraphVisualizer:
         self.settings_frame = ttk.Frame(self.notebook, padding=(10, 10))
         self.notebook.add(self.settings_frame, text="Settings")
         self.notebook.select(self.settings_frame)
-        ttk.Label(self.settings_frame, text="SETTINGS\n", font=('Segoe UI', 12, 'bold')).pack(anchor="w")
+
         ttk.Label(self.settings_frame, text="Music", font=('Segoe UI', 12)).pack(anchor="w")
         music_frame = ttk.Frame(self.settings_frame)
         music_frame.pack(fill="x", pady=(0, 10))
         music_inner_frame = ttk.Frame(music_frame)
-        music_inner_frame.pack(anchor="center") 
-        self.music_inner_frame = music_inner_frame
+        music_inner_frame.pack(anchor="center")
 
-        ttk.Button(music_inner_frame, text="Start music", command=lambda: pygame.mixer.music.play(-1)).pack(side="left", padx=(0, 5))
-        ttk.Button(music_inner_frame, text="Stop music", command=pygame.mixer.music.stop).pack(side="left", padx=(0, 5))
-        ttk.Button(music_inner_frame, text="Volume", command=lambda: self.MusicVolume()).pack(side="left", padx=(0, 5))
-        ttk.Button(music_inner_frame, text="Pause music", command=pygame.mixer.music.pause).pack(side="left", padx=(0, 5))
-        ttk.Button(music_inner_frame, text="Unpause music", command=pygame.mixer.music.unpause).pack(side="left", padx=(0, 5))
-        self.volume_slider_frame = ttk.Frame(music_frame)
-        self.volume_slider_frame.pack(fill="x", pady=(10, 0))
+        def change_music(event=None):
+            track = next((t for t in self.music_tracks if t[0] == self.selected_music.get()), None)
+            if track:
+                pygame.mixer.music.load(track[1])
+                pygame.mixer.music.play(-1)
+                self.is_music_paused = False
+                pause_btn.config(text="Pause")
+        ttk.Label(music_inner_frame, text="Track:").pack(side="left", padx=(0, 5))
+        music_combo = ttk.Combobox(
+            music_inner_frame,
+            textvariable=self.selected_music,
+            values=[t[0] for t in self.music_tracks],
+            state="readonly",
+            width=16
+        )
+        music_combo.pack(side="left", padx=(0, 10))
+        music_combo.bind("<<ComboboxSelected>>", change_music)
+
+        # --- Pause/Unpause toggle ---
+        self.is_music_paused = False
+        def toggle_pause():
+            if self.is_music_paused:
+                pygame.mixer.music.unpause()
+                pause_btn.config(text="Pause")
+                self.is_music_paused = False
+            else:
+                pygame.mixer.music.pause()
+                pause_btn.config(text="Unpause")
+                self.is_music_paused = True
+        pause_btn = ttk.Button(music_inner_frame, text="Pause", command=toggle_pause)
+        pause_btn.pack(side="left", padx=(0, 5))
+
+        # --- Volume slider always visible ---
+        def set_volume(val):
+            pygame.mixer.music.set_volume(float(val))
+        volume_slider_frame = ttk.Frame(music_frame)
+        volume_slider_frame.pack(fill="x", pady=(10, 0))
+        ttk.Label(volume_slider_frame, text="Volume:").pack(padx=(0, 5))
+        volume_slider = ttk.Scale(
+            volume_slider_frame,
+            from_=0, to=1, orient="horizontal",
+            value=pygame.mixer.music.get_volume(),
+            command=set_volume,
+            length=150,
+        )
+        volume_slider.pack(padx=(0, 5))
 
         # Theme selection
         ttk.Label(self.settings_frame, text="Theme", font=('Segoe UI', 12)).pack(anchor="w")
@@ -1538,7 +1586,7 @@ class GraphVisualizer:
         # Photo
         try:
             from PIL import Image, ImageTk
-            img = Image.open("team_photo.png")
+            img = Image.open("resources/team_photo.png")
             img = img.resize((180, 120))
             photo = ImageTk.PhotoImage(img)
             label = ttk.Label(self.about_frame, image=photo)
@@ -1595,5 +1643,6 @@ class GraphVisualizer:
 
 # At the end, launch the app as before
 root = tk.Tk()
+root.iconbitmap("resources/icon.ico")
 app = GraphVisualizer(root)
 root.mainloop()
