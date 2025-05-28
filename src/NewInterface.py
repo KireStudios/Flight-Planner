@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, simpledialog, PhotoImage
+from tkinter import ttk, filedialog, messagebox, simpledialog
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from airSpace import *
@@ -1587,7 +1587,7 @@ class GraphVisualizer:
         try:
             from PIL import Image, ImageTk
             img = Image.open("resources/team_photo.png")
-            img = img.resize((180, 120))
+            img = img.resize((540, 360))
             photo = ImageTk.PhotoImage(img)
             label = ttk.Label(self.about_frame, image=photo)
             label.image = photo  # Keep a reference!
