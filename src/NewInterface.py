@@ -564,8 +564,6 @@ class GraphVisualizer:
             messagebox.showerror("Error", "Invalid nodes.")
             return
         if c1 == None or c2 == None: return
-        c1 = c1.number
-        c2 = c2.number
         self.clear_graph()
         self.graph.AddNavSegment(c1, c2)
         self.graph.Plot(self.ax1)

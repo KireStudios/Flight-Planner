@@ -347,17 +347,17 @@ class AirSpace:
         #Añadir el punto
         self.pts.append(point)
         return True
-    def AddNavSegment(self, codeOrigin,codeDestinarion):
-        if codeOrigin == codeDestinarion:
+    def AddNavSegment(self, Origin,Destinarion):
+        if Origin == Destinarion:
             return False
         org=None
         des=None
         for pt in self.pts:
-            if pt.number == codeOrigin:
+            if pt.name == Origin:
                 org=pt
                 if des:
                     break
-            elif pt.number == codeDestinarion:
+            elif pt.name == Destinarion:
                 des=pt
                 if org:
                     break
