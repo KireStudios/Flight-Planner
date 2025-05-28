@@ -466,7 +466,14 @@ class GraphVisualizer:
         self.main_widgets() 
         self.load = True
         self.clear_graph()
-        self.graph.read_airspace(self.nav_points_file, self.nav_segments_file, self.nav_airports_file)
+        try:
+            self.graph.read_airspace(self.nav_points_file, self.nav_segments_file, self.nav_airports_file)
+        except ValueError as e:
+            messagebox.showerror("Error", f"{e}")
+            progress_win.destroy()
+            return
+        except FileNotFoundError as e:
+            messagebox.showerror("Error", f"{e}")
         self.clear_graph()
         self.graph.Plot(self.ax1)
         self.canvas.draw()

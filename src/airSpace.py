@@ -38,8 +38,10 @@ class AirSpace:
                         self.pts.append(nav_point)
         except FileNotFoundError:
             print(f"Error: File '{file}' not found.")
+            raise FileNotFoundError("Error: File '{file}' not found.")
         except ValueError as e:
             print(f"Error processing file '{file}': {e}")
+            raise ValueError(f"Error processing file '{file}': {e}")
 
     # Read the navigation segments from the file and fill the nav_segments list
     def read_nav_segments(self, file_path):
@@ -56,8 +58,10 @@ class AirSpace:
                         self.seg.append(nav_segment)
         except FileNotFoundError:
             print(f"Error: File '{file}' not found.")
+            raise FileNotFoundError("Error: File '{file}' not found.")
         except ValueError as e:
             print(f"Error processing file '{file}': {e}")
+            raise ValueError(f"Error processing file '{file}': {e}")
 
     # Read the airports from the file and fill the nav_airports list
     def read_airports(self, file_path):
@@ -90,8 +94,10 @@ class AirSpace:
                     self.aip.append(nav_airport)
         except FileNotFoundError:
             print(f"Error: File '{file}' not found.")
+            raise FileNotFoundError("Error: File '{file}' not found.")
         except ValueError as e:
             print(f"Error processing file '{file}': {e}")
+            raise ValueError(f"Error processing file '{file}': {e}")
                     
     def Plot(self, ax):
         scale_factor = (((ax.get_xlim()[1] - ax.get_xlim()[0])**2 + (ax.get_ylim()[1] - ax.get_ylim()[0])**2)**0.5) / 100
