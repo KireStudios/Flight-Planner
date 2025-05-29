@@ -590,7 +590,7 @@ class GraphVisualizer:
             self.clear_graph()
             self.graph.Plot(self.ax1)
             self.canvas.draw()
-    def DeleteSegment_(self,event):#HAY QUE CAMBIARLO HAY VARIOS SEGMENTOS CON LA MISMA DIRECCION Y PUNTO DE INICIO
+    def DeleteSegment_(self,event):#Ya esta canviado: HAY QUE CAMBIARLO HAY VARIOS SEGMENTOS CON LA MISMA DIRECCION Y PUNTO DE INICIO
         min_dist = (((self.ax1.get_xlim()[1]-self.ax1.get_xlim()[0])**2+(self.ax1.get_ylim()[1]-self.ax1.get_ylim()[0])**2)**0.5)/self.tquocient
         segment = []
         for s in self.graph.seg:

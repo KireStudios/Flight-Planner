@@ -382,7 +382,7 @@ class AirSpace:
     def DeleteNavPoint(self, point):
         segmentsToDelete = []
         for s in self.seg:
-            if s.org == point or s.des == point:
+            if s.org == point.number or s.des == point.number:
                 segmentsToDelete.append(s)
         for s in segmentsToDelete:
             self.DeleteNavSegment(s)
