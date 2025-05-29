@@ -599,7 +599,9 @@ class GraphVisualizer:
                     org = p
                 elif p.number == s.des:
                     des = p
-            dist=abs((des.lat - org.lat) * (event.xdata - org.lon) - (des.lon - org.lon) * (event.ydata - org.lat)) / ((des.lat - org.lat)**2 + (des.lon - org.lon)**2)**0.5
+            # miramos distancia al punto de inicio y final ya que si no es la prolongacion de la linea y no funciona
+            dist= ((event.xdata - org.lon) ** 2 + (event.ydata - org.lat) ** 2) ** 0.5 + ((event.xdata - des.lon) ** 2 + (event.ydata - des.lat) ** 2) ** 0.5
+            # abs((des.lat - org.lat) * (event.xdata - org.lon) - (des.lon - org.lon) * (event.ydata - org.lat)) / ((des.lat - org.lat)**2 + (des.lon - org.lon)**2)**0.5
             if dist<min_dist:
                 min_dist=dist
                 segment.append(s)
