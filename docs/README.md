@@ -38,6 +38,7 @@ The GUI allows you to:
 - Save and load graphs from files
 - Visualize node neighborhoods
 - Interactively add/remove waypoints and segments
+- Interactively add/remove waypoints and segments
 - Reachability analisis from a node
 - Shortest path finding using A* algorithm
 

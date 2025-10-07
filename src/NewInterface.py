@@ -938,6 +938,7 @@ class GraphVisualizer:
             self.canvas.draw()
 
     def export_to_google_earth(self):
+        print("Exporting to Google Earth KML...")
         from tkinter import filedialog
 
         # Fast export without asking with later option to save it
