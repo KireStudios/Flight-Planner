@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 from navPoint import NavPoint
 from navSegment import NavSegment
 from navAirport import NavAirport
+import tkinter as tk
 
 class AirSpace:
     def __init__(self, nav_points=None, nav_segments=None, nav_airports=None):
@@ -9,6 +10,12 @@ class AirSpace:
         self.seg = nav_segments if nav_segments is not None else []  # List of NavSegment objects
         self.aip = nav_airports if nav_airports is not None else []  # List of NavAirport objects
 
+        self.show_names_var = tk.BooleanVar(value=True)
+        self.show_pts_var = tk.BooleanVar(value=True)
+        self.show_seg_var = tk.BooleanVar(value=True)
+        self.show_airports_var = tk.BooleanVar(value=True)
+        self.show_deactivated_var = tk.BooleanVar(value=True)
+    
     # Read and fill the airspace with the data from the files
     def read_airspace(self, nav_file, seg_file, airport_file):
         self.read_nav_points(nav_file)
@@ -17,6 +24,7 @@ class AirSpace:
 
     # Read the navigation points from the file and fill the nav_points list
     def read_nav_points(self, file_path):
+        self.pts.clear()  # Clear existing points
         try:
             with open(file_path, 'r') as file:
                 for line in file:
@@ -30,11 +38,14 @@ class AirSpace:
                         self.pts.append(nav_point)
         except FileNotFoundError:
             print(f"Error: File '{file}' not found.")
+            raise FileNotFoundError("Error: File '{file}' not found.")
         except ValueError as e:
             print(f"Error processing file '{file}': {e}")
+            raise ValueError(f"Error processing file '{file}': {e}")
 
     # Read the navigation segments from the file and fill the nav_segments list
     def read_nav_segments(self, file_path):
+        self.seg.clear()
         try:
             with open(file_path, 'r') as file:
                 for line in file:
@@ -47,11 +58,14 @@ class AirSpace:
                         self.seg.append(nav_segment)
         except FileNotFoundError:
             print(f"Error: File '{file}' not found.")
+            raise FileNotFoundError("Error: File '{file}' not found.")
         except ValueError as e:
             print(f"Error processing file '{file}': {e}")
+            raise ValueError(f"Error processing file '{file}': {e}")
 
     # Read the airports from the file and fill the nav_airports list
     def read_airports(self, file_path):
+        self.aip.clear()
         try:
             with open(file_path, 'r') as file:
                 sids = []
@@ -80,29 +94,44 @@ class AirSpace:
                     self.aip.append(nav_airport)
         except FileNotFoundError:
             print(f"Error: File '{file}' not found.")
+            raise FileNotFoundError("Error: File '{file}' not found.")
         except ValueError as e:
             print(f"Error processing file '{file}': {e}")
+            raise ValueError(f"Error processing file '{file}': {e}")
                     
     def Plot(self, ax):
         scale_factor = (((ax.get_xlim()[1] - ax.get_xlim()[0])**2 + (ax.get_ylim()[1] - ax.get_ylim()[0])**2)**0.5) / 100
-        for pt in self.pts:
-            ax.plot(pt.lon, pt.lat, 'ob', markersize=scale_factor*200)
-            ax.text(pt.lon, pt.lat + scale_factor, pt.name, fontsize=scale_factor*400, ha='center', va='bottom')
-        for seg in self.seg:
-            # Buscar los puntos correspondientes a seg.org y seg.des
-            pt1 = next((pt for pt in self.pts if pt.number == seg.org), None)
-            pt2 = next((pt for pt in self.pts if pt.number == seg.des), None)
-            if pt1 and pt2:
-                ax.plot([pt1.lon, pt2.lon], [pt1.lat, pt2.lat], 'r-', linewidth=scale_factor*30)
-                # Agregar una flecha en dirección del punto final
-                ax.annotate('', xy=(pt2.lon, pt2.lat), xytext=(pt1.lon, pt1.lat),
-                            arrowprops=dict(facecolor='red', edgecolor='red', arrowstyle='->', lw=scale_factor*30))
-        for air in self.aip:
-            for pts in self.pts:
-                if pts.name == air.SIDs[0]:
-                    ax.plot(pts.lon, pts.lat, 'og', markersize=scale_factor*200)
-                    ax.text(pts.lon, pts.lat + scale_factor, air.name, fontsize=scale_factor*400, ha='center', va='bottom')
-                    break
+        if self.show_pts_var.get():
+            for pt in self.pts:
+                ax.plot(pt.lon, pt.lat, 'ob', markersize=scale_factor*200)
+                if self.show_names_var.get():
+                    ax.text(pt.lon, pt.lat + scale_factor, pt.name, fontsize=scale_factor*400, ha='center', va='bottom')
+        if self.show_seg_var.get():
+            for seg in self.seg:
+                # Buscar los puntos correspondientes a seg.org y seg.des
+                pt1 = next((pt for pt in self.pts if pt.number == seg.org), None)
+                pt2 = next((pt for pt in self.pts if pt.number == seg.des), None)
+                if pt1 and pt2:
+                    ax.plot([pt1.lon, pt2.lon], [pt1.lat, pt2.lat], 'r-', linewidth=scale_factor*30)
+                    # Agregar una flecha en dirección del punto final
+                    ax.annotate('', xy=(pt2.lon, pt2.lat), xytext=(pt1.lon, pt1.lat), arrowprops=dict(facecolor='red', edgecolor='red', arrowstyle='->', lw=scale_factor*30))
+        if self.show_airports_var.get():
+            for air in self.aip:
+                for pts in self.pts:
+                    for pt in air.SIDs + air.STARs:
+                        if pts.name == pt.name and pt in air.SIDs:
+                            if pts.name == air.SIDs[0]:
+                                #We plot airport at first SID as we don't know the airport position
+                                ax.plot(pts.lon, pts.lat, 'oo', markersize=scale_factor*200)
+                                if self.show_names_var.get():
+                                    ax.text(pts.lon, pts.lat + scale_factor, air.name, fontsize=scale_factor*400, ha='center', va='bottom')
+                            ax.plot(pts.lon, pts.lat, 'og', markersize=scale_factor*200)
+                            if self.show_names_var.get():
+                                ax.text(pts.lon, pts.lat + scale_factor, air.name, fontsize=scale_factor*400, ha='center', va='bottom')
+                        elif pts.name == pt.name and pt in air.STARs:
+                            ax.plot(pts.lon, pts.lat, 'or', markersize=scale_factor*200)
+                            if self.show_names_var.get():
+                                ax.text(pts.lon, pts.lat + scale_factor, air.name, fontsize=scale_factor*400, ha='center', va='bottom')
 
         ax.set_xlabel('Longitude')
         ax.set_ylabel('Latitude')
@@ -118,34 +147,41 @@ class AirSpace:
         scale_factor = (((ax.get_xlim()[1] - ax.get_xlim()[0])**2 + (ax.get_ylim()[1] - ax.get_ylim()[0])**2)**0.5) / 100
 
         # Plotear el punto de origen
-        ax.plot(origin.lon, origin.lat, 'bo', markersize=scale_factor*200)
-        ax.text(origin.lon, origin.lat + scale_factor, origin.name, fontsize=scale_factor*400, ha='center', va='bottom')
+        if self.show_pts_var.get():
+            ax.plot(origin.lon, origin.lat, 'bo', markersize=scale_factor*200)
+            if self.show_names_var.get():
+                ax.text(origin.lon, origin.lat + scale_factor, origin.name, fontsize=scale_factor*400, ha='center', va='bottom')
 
         # Crear un conjunto para almacenar los vecinos
         neighbors = set()
 
         # Buscar y plotear los puntos vecinos
-        for seg in self.seg:
-            if seg.org == origin.number:
-                neighbor = next((pt for pt in self.pts if pt.number == seg.des), None)
-            else:
-                continue
+        if self.show_pts_var.get():
+            for seg in self.seg:
+                if seg.org == origin.number:
+                    neighbor = next((pt for pt in self.pts if pt.number == seg.des), None)
+                else:
+                    continue
 
-            if neighbor:
-                neighbors.add(neighbor)  # Agregar el vecino al conjunto
-                # Plotear el vecino
-                ax.plot(neighbor.lon, neighbor.lat, 'go', markersize=scale_factor*200)
-                ax.text(neighbor.lon, neighbor.lat + scale_factor, neighbor.name, fontsize=scale_factor*400, ha='center', va='bottom')
+                if neighbor:
+                    neighbors.add(neighbor)  # Agregar el vecino al conjunto
+                    # Plotear el vecino
+                    ax.plot(neighbor.lon, neighbor.lat, 'go', markersize=scale_factor*200)
+                    if self.show_names_var.get():
+                        ax.text(neighbor.lon, neighbor.lat + scale_factor, neighbor.name, fontsize=scale_factor*400, ha='center', va='bottom')
 
-                # Dibujar una flecha entre el origen y el vecino
-                ax.annotate('', xy=(neighbor.lon, neighbor.lat), xytext=(origin.lon, origin.lat),
-                            arrowprops=dict(facecolor='green', edgecolor='green', arrowstyle='->', lw=scale_factor*30))
+                    # Dibujar una flecha entre el origen y el vecino
+                    ax.annotate('', xy=(neighbor.lon, neighbor.lat), xytext=(origin.lon, origin.lat),
+                                arrowprops=dict(facecolor='green', edgecolor='green', arrowstyle='->', lw=scale_factor*30))
 
         # Plotear los demás puntos en gris
-        for pt in self.pts:
-            if pt != origin and pt not in neighbors:
-                ax.plot(pt.lon, pt.lat, 'o', color='gray', markersize=scale_factor*200)
-                ax.text(pt.lon, pt.lat + scale_factor, pt.name, fontsize=scale_factor*400, ha='center', va='bottom')
+        if self.show_pts_var.get() and self.show_deactivated_var.get():
+            if self.show_deactivated_var.get():
+                for pt in self.pts:
+                    if pt != origin and pt not in neighbors:
+                        ax.plot(pt.lon, pt.lat, 'o', color='gray', markersize=scale_factor*200)
+                        if self.show_names_var.get():
+                            ax.text(pt.lon, pt.lat + scale_factor, pt.name, fontsize=scale_factor*400, ha='center', va='bottom')
 
         ax.set_xlabel('Longitude')
         ax.set_ylabel('Latitude')
@@ -242,23 +278,29 @@ class AirSpace:
         scale_factor = (((ax.get_xlim()[1] - ax.get_xlim()[0])**2 + (ax.get_ylim()[1] - ax.get_ylim()[0])**2)**0.5) / 100
 
         # Dibujar el camino
-        for i in range(len(points) - 1):
-            pt1 = points[i]
-            pt2 = points[i + 1]
-            ax.plot([pt1.lon, pt2.lon], [pt1.lat, pt2.lat], 'r-', linewidth=scale_factor*30)
-            ax.annotate('', xy=(pt2.lon, pt2.lat), xytext=(pt1.lon, pt1.lat),
-                        arrowprops=dict(facecolor='red', edgecolor='red', arrowstyle='->', lw=scale_factor*30))
+        if self.show_seg_var.get():
+            for i in range(len(points) - 1):
+                pt1 = points[i]
+                pt2 = points[i + 1]
+                ax.plot([pt1.lon, pt2.lon], [pt1.lat, pt2.lat], 'r-', linewidth=scale_factor*30)
+                ax.annotate('', xy=(pt2.lon, pt2.lat), xytext=(pt1.lon, pt1.lat),
+                            arrowprops=dict(facecolor='red', edgecolor='red', arrowstyle='->', lw=scale_factor*30))
 
         # Dibujar los puntos del camino
-        for pt in points:
-            ax.plot(pt.lon, pt.lat, 'go', markersize=scale_factor*200)
-            ax.text(pt.lon, pt.lat + scale_factor, pt.name, fontsize=scale_factor*400, ha='center', va='bottom')
+        if self.show_pts_var.get():
+            for pt in points:
+                ax.plot(pt.lon, pt.lat, 'go', markersize=scale_factor*200)
+                if self.show_names_var.get():
+                    ax.text(pt.lon, pt.lat + scale_factor, pt.name, fontsize=scale_factor*400, ha='center', va='bottom')
 
         # Dibujar los demás puntos en gris
-        for pt in self.pts:
-            if pt not in points:
-                ax.plot(pt.lon, pt.lat, 'o', color='gray', markersize=scale_factor*200)
-                ax.text(pt.lon, pt.lat + scale_factor, pt.name, fontsize=scale_factor*400, ha='center', va='bottom')
+        if self.show_pts_var.get() and self.show_deactivated_var.get():
+            if self.show_deactivated_var.get():
+                for pt in self.pts:
+                    if pt not in points:
+                        ax.plot(pt.lon, pt.lat, 'o', color='gray', markersize=scale_factor*200)
+                        if self.show_names_var.get():
+                            ax.text(pt.lon, pt.lat + scale_factor, pt.name, fontsize=scale_factor*400, ha='center', va='bottom')
 
         ax.set_xlabel('Longitude')
         ax.set_ylabel('Latitude')
@@ -274,24 +316,30 @@ class AirSpace:
         scale_factor = (((ax.get_xlim()[1] - ax.get_xlim()[0])**2 + (ax.get_ylim()[1] - ax.get_ylim()[0])**2)**0.5) / 100
 
         # Dibujar el camino
-        for seg in self.seg:
-            pt1 = next((pt for pt in self.pts if pt.number == seg.org), None)
-            pt2 = next((pt for pt in self.pts if pt.number == seg.des), None)
-            if pt1 in points and pt2 in points:
-                if pt1 and pt2:
-                    ax.plot([pt1.lon, pt2.lon], [pt1.lat, pt2.lat], 'r-', linewidth=scale_factor*30)
-                    ax.annotate('', xy=(pt2.lon, pt2.lat), xytext=(pt1.lon, pt1.lat), arrowprops=dict(facecolor='red', edgecolor='red', arrowstyle='->', lw=scale_factor*30))
+        if self.show_seg_var.get():
+            for seg in self.seg:
+                pt1 = next((pt for pt in self.pts if pt.number == seg.org), None)
+                pt2 = next((pt for pt in self.pts if pt.number == seg.des), None)
+                if pt1 in points and pt2 in points:
+                    if pt1 and pt2:
+                        ax.plot([pt1.lon, pt2.lon], [pt1.lat, pt2.lat], 'r-', linewidth=scale_factor*30)
+                        ax.annotate('', xy=(pt2.lon, pt2.lat), xytext=(pt1.lon, pt1.lat), arrowprops=dict(facecolor='red', edgecolor='red', arrowstyle='->', lw=scale_factor*30))
 
         # Dibujar los puntos del camino
-        for pt in points:
-            ax.plot(pt.lon, pt.lat, 'go', markersize=scale_factor*200)
-            ax.text(pt.lon, pt.lat + scale_factor, pt.name, fontsize=scale_factor*400, ha='center', va='bottom')
+        if self.show_pts_var.get():
+            for pt in points:
+                ax.plot(pt.lon, pt.lat, 'go', markersize=scale_factor*200)
+                if self.show_names_var.get():
+                    ax.text(pt.lon, pt.lat + scale_factor, pt.name, fontsize=scale_factor*400, ha='center', va='bottom')
 
         # Dibujar los demás puntos en gris
-        for pt in self.pts:
-            if pt not in points:
-                ax.plot(pt.lon, pt.lat, 'o', color='gray', markersize=scale_factor*200)
-                ax.text(pt.lon, pt.lat + scale_factor, pt.name, fontsize=scale_factor*400, ha='center', va='bottom')
+        if self.show_pts_var.get() and self.show_deactivated_var.get():
+            if self.show_deactivated_var.get():
+                for pt in self.pts:
+                    if pt not in points:
+                        ax.plot(pt.lon, pt.lat, 'o', color='gray', markersize=scale_factor*200)
+                        if self.show_names_var.get():
+                            ax.text(pt.lon, pt.lat + scale_factor, pt.name, fontsize=scale_factor*400, ha='center', va='bottom')
 
         ax.set_xlabel('Longitude')
         ax.set_ylabel('Latitude')
@@ -305,17 +353,17 @@ class AirSpace:
         #Añadir el punto
         self.pts.append(point)
         return True
-    def AddNavSegment(self, codeOrigin,codeDestinarion):
-        if codeOrigin == codeDestinarion:
+    def AddNavSegment(self, Origin,Destinarion):
+        if Origin == Destinarion:
             return False
         org=None
         des=None
         for pt in self.pts:
-            if pt.number == codeOrigin:
+            if pt.name == Origin:
                 org=pt
                 if des:
                     break
-            elif pt.number == codeDestinarion:
+            elif pt.name == Destinarion:
                 des=pt
                 if org:
                     break
@@ -334,7 +382,7 @@ class AirSpace:
     def DeleteNavPoint(self, point):
         segmentsToDelete = []
         for s in self.seg:
-            if s.org == point or s.des == point:
+            if s.org == point.number or s.des == point.number:
                 segmentsToDelete.append(s)
         for s in segmentsToDelete:
             self.DeleteNavSegment(s)
@@ -359,3 +407,33 @@ class AirSpace:
                     file.write(f"{star}\n")
         print(f"El grafo se ha guardado correctamente en {filenames[0]}, {filenames[1]} y {filenames[2]}.")
         return
+
+    def TogglePts(self, ax=None, val=True):
+        self.show_pts_var.set(val)
+        if ax is not None:
+            ax.clear()
+        self.Plot(ax)
+
+    def ToggleSeg(self, ax=None, val=True):
+        self.show_seg_var.set(val)
+        if ax is not None:
+            ax.clear()
+        self.Plot(ax)
+
+    def ToggleAirports(self, ax=None, val=True):
+        self.show_airports_var.set(val)
+        if ax is not None:
+            ax.clear()
+        self.Plot(ax)
+
+    def ToggleNames(self, ax=None, val=True):
+        self.show_names_var.set(val)
+        if ax is not None:
+            ax.clear()
+        self.Plot(ax)
+
+    def ToggleDeactivated(self, ax=None, val=True):
+        self.show_deactivated_var.set(val)
+        if ax is not None:
+            ax.clear()
+        self.Plot(ax)
